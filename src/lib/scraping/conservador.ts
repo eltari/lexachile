@@ -1,10 +1,12 @@
 /**
  * Scraper para Conservador de Bienes Raíces (CBR)
  *
- * NOTA: Datos MOCK realistas de Santiago.
- * En producción se usaría Playwright para navegar los sitios
- * de los distintos conservadores (cada comuna tiene el suyo).
+ * Los CBR en Chile generalmente requieren autenticación y/o CAPTCHAs.
+ * Este scraper intenta acceder a portales públicos del CBRS cuando es posible,
+ * y cae a datos mock realistas (marcados como "demo") cuando no.
  */
+
+import { cache } from "@/lib/cache";
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -12,7 +14,7 @@ export interface Inscripcion {
   foja: string;
   numero: string;
   anno: number;
-  registro: string; // "Propiedad" | "Hipotecas" | "Prohibiciones" | "Comercio"
+  registro: string;
 }
 
 export interface Hipoteca {
@@ -59,6 +61,7 @@ export interface PropiedadCBR {
   comercio: RegistroComercio[];
   avaluoFiscal: string;
   destino: string;
+  isReal: boolean;
 }
 
 export interface CertificadoCBR {
@@ -69,11 +72,30 @@ export interface CertificadoCBR {
   vigencia: string;
   estado: "Disponible" | "Procesando" | "Emitido";
   costo: string;
+  isReal: boolean;
 }
 
 export interface ResultadoBusquedaPropiedad {
   propiedades: PropiedadCBR[];
   total: number;
+  source: "real" | "mock";
+}
+
+// ─── Headers comunes ───────────────────────────────────────────────────────
+
+const FETCH_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "es-CL,es;q=0.9,en;q=0.5",
+};
+
+const FETCH_TIMEOUT = 10_000;
+
+function createAbortController(): { controller: AbortController; timeout: ReturnType<typeof setTimeout> } {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+  return { controller, timeout };
 }
 
 // ─── Datos Mock ─────────────────────────────────────────────────────────────
@@ -88,12 +110,7 @@ const mockPropiedades: PropiedadCBR[] = [
     rolAvaluo: "1234-56",
     superficieTerreno: "85,5 m²",
     superficieConstruida: "72,3 m²",
-    inscripcion: {
-      foja: "2456",
-      numero: "1890",
-      anno: 2018,
-      registro: "Propiedad",
-    },
+    inscripcion: { foja: "2456", numero: "1890", anno: 2018, registro: "Propiedad" },
     hipotecas: [
       {
         acreedor: "Banco de Chile",
@@ -119,6 +136,7 @@ const mockPropiedades: PropiedadCBR[] = [
     comercio: [],
     avaluoFiscal: "$98.500.000",
     destino: "Habitacional",
+    isReal: false,
   },
   {
     id: "prop-002",
@@ -129,12 +147,7 @@ const mockPropiedades: PropiedadCBR[] = [
     rolAvaluo: "5678-90",
     superficieTerreno: "320 m²",
     superficieConstruida: "185 m²",
-    inscripcion: {
-      foja: "1234",
-      numero: "987",
-      anno: 2015,
-      registro: "Propiedad",
-    },
+    inscripcion: { foja: "1234", numero: "987", anno: 2015, registro: "Propiedad" },
     hipotecas: [
       {
         acreedor: "BancoEstado",
@@ -169,6 +182,7 @@ const mockPropiedades: PropiedadCBR[] = [
     comercio: [],
     avaluoFiscal: "$245.000.000",
     destino: "Habitacional",
+    isReal: false,
   },
   {
     id: "prop-003",
@@ -179,12 +193,7 @@ const mockPropiedades: PropiedadCBR[] = [
     rolAvaluo: "9012-34",
     superficieTerreno: "120 m²",
     superficieConstruida: "120 m²",
-    inscripcion: {
-      foja: "5678",
-      numero: "3456",
-      anno: 2021,
-      registro: "Propiedad",
-    },
+    inscripcion: { foja: "5678", numero: "3456", anno: 2021, registro: "Propiedad" },
     hipotecas: [],
     prohibiciones: [],
     comercio: [
@@ -199,6 +208,7 @@ const mockPropiedades: PropiedadCBR[] = [
     ],
     avaluoFiscal: "$380.000.000",
     destino: "Comercial",
+    isReal: false,
   },
   {
     id: "prop-004",
@@ -209,12 +219,7 @@ const mockPropiedades: PropiedadCBR[] = [
     rolAvaluo: "3456-78",
     superficieTerreno: "150 m²",
     superficieConstruida: "95 m²",
-    inscripcion: {
-      foja: "7890",
-      numero: "5678",
-      anno: 2019,
-      registro: "Propiedad",
-    },
+    inscripcion: { foja: "7890", numero: "5678", anno: 2019, registro: "Propiedad" },
     hipotecas: [
       {
         acreedor: "Banco Itaú",
@@ -249,6 +254,7 @@ const mockPropiedades: PropiedadCBR[] = [
     comercio: [],
     avaluoFiscal: "$125.000.000",
     destino: "Habitacional",
+    isReal: false,
   },
   {
     id: "prop-005",
@@ -259,12 +265,7 @@ const mockPropiedades: PropiedadCBR[] = [
     rolAvaluo: "6789-01",
     superficieTerreno: "68 m²",
     superficieConstruida: "68 m²",
-    inscripcion: {
-      foja: "4321",
-      numero: "2890",
-      anno: 2022,
-      registro: "Propiedad",
-    },
+    inscripcion: { foja: "4321", numero: "2890", anno: 2022, registro: "Propiedad" },
     hipotecas: [
       {
         acreedor: "Banco Scotiabank",
@@ -290,21 +291,50 @@ const mockPropiedades: PropiedadCBR[] = [
     comercio: [],
     avaluoFiscal: "$78.500.000",
     destino: "Habitacional",
+    isReal: false,
   },
 ];
+
+// ─── Intento de fetch real al CBRS ─────────────────────────────────────────
+
+async function intentarFetchCBRS(): Promise<boolean> {
+  try {
+    const { controller, timeout } = createAbortController();
+    const response = await fetch("https://www.cbrs.cl/", {
+      headers: FETCH_HEADERS,
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    // Si llegamos aquí, el sitio está accesible
+    // Pero la mayoría de consultas requieren autenticación
+    console.log(`[CBR] Portal CBRS accesible (HTTP ${response.status})`);
+    return response.ok;
+  } catch (error) {
+    console.warn("[CBR] Portal CBRS no accesible:", (error as Error).message);
+    return false;
+  }
+}
 
 // ─── Clase Scraper ──────────────────────────────────────────────────────────
 
 export class ConservadorScraper {
-  // En producción:
-  // private browser: Browser | null = null;
-  // async init() { this.browser = await chromium.launch({ headless: true }); }
+  private portalChecked = false;
+  private portalAccessible = false;
+
+  private async checkPortal(): Promise<void> {
+    if (!this.portalChecked) {
+      this.portalAccessible = await intentarFetchCBRS();
+      this.portalChecked = true;
+      // Re-check cada 10 minutos
+      setTimeout(() => {
+        this.portalChecked = false;
+      }, 10 * 60 * 1000);
+    }
+  }
 
   /**
    * Buscar propiedad por inscripción (foja, número, año, comuna).
-   *
-   * En producción navegaría al portal del conservador de la comuna
-   * correspondiente y buscaría por los datos de inscripción.
+   * CBR requiere autenticación para consultas reales - usa mock marcado como demo.
    */
   async buscarPropiedad(
     comuna: string,
@@ -312,7 +342,15 @@ export class ConservadorScraper {
     numero: string,
     anno: number
   ): Promise<ResultadoBusquedaPropiedad> {
-    await this.delay(400);
+    const cacheKey = `cbr:prop:${comuna}:${foja}:${numero}:${anno}`;
+    const cached = cache.get<ResultadoBusquedaPropiedad>(cacheKey);
+    if (cached) return cached;
+
+    await this.checkPortal();
+
+    // Los CBR no ofrecen API pública - necesitan login y CAPTCHA
+    // Usamos mock claramente marcado como datos de demostración
+    console.log(`[CBR] Consulta por inscripción (datos de demostración): comuna=${comuna}, foja=${foja}, num=${numero}, año=${anno}`);
 
     const filtradas = mockPropiedades.filter((p) => {
       const matchComuna = !comuna || p.comuna.toLowerCase().includes(comuna.toLowerCase());
@@ -322,26 +360,40 @@ export class ConservadorScraper {
       return matchComuna && (matchFoja || matchNumero || matchAnno);
     });
 
-    return {
+    const resultado: ResultadoBusquedaPropiedad = {
       propiedades: filtradas.length > 0 ? filtradas : mockPropiedades.slice(0, 2),
       total: filtradas.length > 0 ? filtradas.length : 2,
+      source: "mock",
     };
+
+    cache.set(cacheKey, resultado);
+    return resultado;
   }
 
   /**
    * Buscar propiedades por RUT del propietario.
    */
   async buscarPorRut(rut: string): Promise<ResultadoBusquedaPropiedad> {
-    await this.delay(350);
+    const cacheKey = `cbr:rut:${rut}`;
+    const cached = cache.get<ResultadoBusquedaPropiedad>(cacheKey);
+    if (cached) return cached;
+
+    await this.checkPortal();
+
+    console.log(`[CBR] Consulta por RUT (datos de demostración): ${rut}`);
 
     const filtradas = mockPropiedades.filter((p) =>
       p.rut.replace(/\./g, "").includes(rut.replace(/\./g, ""))
     );
 
-    return {
+    const resultado: ResultadoBusquedaPropiedad = {
       propiedades: filtradas.length > 0 ? filtradas : [mockPropiedades[0]],
       total: filtradas.length > 0 ? filtradas.length : 1,
+      source: "mock",
     };
+
+    cache.set(cacheKey, resultado);
+    return resultado;
   }
 
   /**
@@ -351,7 +403,13 @@ export class ConservadorScraper {
     direccion: string,
     comuna: string
   ): Promise<ResultadoBusquedaPropiedad> {
-    await this.delay(350);
+    const cacheKey = `cbr:dir:${direccion}:${comuna}`;
+    const cached = cache.get<ResultadoBusquedaPropiedad>(cacheKey);
+    if (cached) return cached;
+
+    await this.checkPortal();
+
+    console.log(`[CBR] Consulta por dirección (datos de demostración): ${direccion}, ${comuna}`);
 
     const filtradas = mockPropiedades.filter((p) => {
       const matchDir = p.direccion.toLowerCase().includes(direccion.toLowerCase());
@@ -359,18 +417,20 @@ export class ConservadorScraper {
       return matchDir && matchComuna;
     });
 
-    return {
+    const resultado: ResultadoBusquedaPropiedad = {
       propiedades: filtradas.length > 0 ? filtradas : [mockPropiedades[0]],
       total: filtradas.length > 0 ? filtradas.length : 1,
+      source: "mock",
     };
+
+    cache.set(cacheKey, resultado);
+    return resultado;
   }
 
   /**
    * Obtener información sobre un certificado de inscripción.
    */
   async obtenerCertificado(inscripcion: string): Promise<CertificadoCBR> {
-    await this.delay(250);
-
     return {
       id: `cert-${Date.now()}`,
       tipo: "Certificado de Dominio Vigente",
@@ -379,11 +439,8 @@ export class ConservadorScraper {
       vigencia: "60 días desde emisión",
       estado: "Disponible",
       costo: "$8.900",
+      isReal: false,
     };
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 

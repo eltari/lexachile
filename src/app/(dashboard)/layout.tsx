@@ -1,18 +1,35 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import SessionProvider from "@/components/providers/session-provider";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await auth();
+
+  if (!session?.user) {
+    redirect("/login");
+  }
+
+  const user = {
+    name: session.user.name ?? "",
+    email: session.user.email ?? "",
+    role: session.user.role ?? "abogado",
+  };
+
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-slate-950">
-      <Sidebar />
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+    <SessionProvider>
+      <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-slate-950">
+        <Sidebar userName={user.name} userRole={user.role} />
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <Header userName={user.name} userEmail={user.email} />
+          <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </SessionProvider>
   );
 }

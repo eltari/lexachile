@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { diarioOficialScraper } from "@/lib/scraping/diario-oficial";
+import { cache } from "@/lib/cache";
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,8 +15,20 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
+
+        const cacheKey = `api:do:buscar:${query}:${fecha || ""}`;
+        const cached = cache.get(cacheKey);
+        if (cached) {
+          return Response.json({ data: cached, cached: true });
+        }
+
         const resultado = await diarioOficialScraper.buscarPublicaciones(query, fecha);
-        return Response.json({ data: resultado });
+        cache.set(cacheKey, resultado, 5 * 60 * 1000);
+        return Response.json({
+          data: resultado,
+          source: resultado.source,
+          cached: false,
+        });
       }
 
       case "obtenerPublicacion": {
@@ -25,8 +38,12 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
+
         const publicacion = await diarioOficialScraper.obtenerPublicacion(id);
-        return Response.json({ data: publicacion });
+        return Response.json({
+          data: publicacion,
+          source: publicacion?.source || "mock",
+        });
       }
 
       default:

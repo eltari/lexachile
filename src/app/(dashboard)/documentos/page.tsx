@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   FileText,
@@ -15,18 +15,19 @@ import {
   MoreVertical,
   Calendar,
   User,
+  Loader2,
 } from "lucide-react";
 
 type DocTipo = "escrito" | "contrato" | "sentencia" | "plantilla" | "otro";
 
-interface Documento {
+interface DocumentoAPI {
   id: string;
   nombre: string;
-  tipo: DocTipo;
-  fecha: string;
-  causa?: string;
-  cliente?: string;
-  tamano: string;
+  tipo: string;
+  createdAt: string;
+  causa?: { id: string; rol: string; caratulado: string } | null;
+  cliente?: { id: string; nombre: string; rut: string } | null;
+  autor?: { id: string; name: string } | null;
 }
 
 const tipoConfig: Record<
@@ -73,113 +74,48 @@ const tabs = [
   { key: "plantilla", label: "Plantillas" },
 ];
 
-const mockDocumentos: Documento[] = [
-  {
-    id: "1",
-    nombre: "Demanda Civil - Cobro de Pesos",
-    tipo: "escrito",
-    fecha: "2026-03-25",
-    causa: "C-1234-2026 - Gonzalez con Munoz",
-    cliente: "Juan Carlos Gonzalez",
-    tamano: "45 KB",
-  },
-  {
-    id: "2",
-    nombre: "Contestacion de Demanda",
-    tipo: "escrito",
-    fecha: "2026-03-22",
-    causa: "C-321-2026 - Lopez con Banco Nacional",
-    cliente: "Maria Lopez",
-    tamano: "38 KB",
-  },
-  {
-    id: "3",
-    nombre: "Contrato de Arrendamiento - Depto Las Condes",
-    tipo: "contrato",
-    fecha: "2026-03-20",
-    cliente: "Pedro Martinez",
-    tamano: "52 KB",
-  },
-  {
-    id: "4",
-    nombre: "Sentencia Definitiva - Indemnizacion",
-    tipo: "sentencia",
-    fecha: "2026-03-18",
-    causa: "C-892-2025 - Perez con Inversiones SpA",
-    tamano: "120 KB",
-  },
-  {
-    id: "5",
-    nombre: "Recurso de Apelacion",
-    tipo: "escrito",
-    fecha: "2026-03-15",
-    causa: "C-892-2025 - Perez con Inversiones SpA",
-    cliente: "Roberto Perez",
-    tamano: "35 KB",
-  },
-  {
-    id: "6",
-    nombre: "Contrato de Trabajo - Empresa Ltda.",
-    tipo: "contrato",
-    fecha: "2026-03-12",
-    cliente: "Empresa Soto Ltda.",
-    tamano: "48 KB",
-  },
-  {
-    id: "7",
-    nombre: "Escritura de Compraventa",
-    tipo: "contrato",
-    fecha: "2026-03-10",
-    cliente: "Ana Fuentes",
-    tamano: "85 KB",
-  },
-  {
-    id: "8",
-    nombre: "Recurso de Proteccion",
-    tipo: "escrito",
-    fecha: "2026-03-08",
-    causa: "P-234-2026 - Fuentes con Municipalidad",
-    cliente: "Ana Fuentes",
-    tamano: "42 KB",
-  },
-  {
-    id: "9",
-    nombre: "Sentencia Laboral - Despido Injustificado",
-    tipo: "sentencia",
-    fecha: "2026-03-05",
-    causa: "L-456-2026 - Soto con Empresa Ltda.",
-    tamano: "95 KB",
-  },
-  {
-    id: "10",
-    nombre: "Poder Simple - Representacion",
-    tipo: "otro",
-    fecha: "2026-03-01",
-    cliente: "Carlos Rodriguez",
-    tamano: "15 KB",
-  },
-];
-
 export default function DocumentosPage() {
   const [activeTab, setActiveTab] = useState("todos");
   const [searchQuery, setSearchQuery] = useState("");
+  const [documentos, setDocumentos] = useState<DocumentoAPI[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const filteredDocs = useMemo(() => {
-    let docs = mockDocumentos;
-    if (activeTab !== "todos") {
-      docs = docs.filter((d) => d.tipo === activeTab);
+  const fetchDocumentos = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams();
+      if (activeTab !== "todos") params.set("tipo", activeTab);
+      if (searchQuery) params.set("search", searchQuery);
+      params.set("limit", "50");
+
+      const res = await fetch(`/api/documentos?${params.toString()}`);
+      if (!res.ok) throw new Error("Error al cargar documentos");
+      const json = await res.json();
+      setDocumentos(json.data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setLoading(false);
     }
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      docs = docs.filter(
-        (d) =>
-          d.nombre.toLowerCase().includes(q) ||
-          d.causa?.toLowerCase().includes(q) ||
-          d.cliente?.toLowerCase().includes(q)
-      );
-    }
-    return docs;
   }, [activeTab, searchQuery]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchDocumentos();
+    }, searchQuery ? 300 : 0);
+    return () => clearTimeout(timer);
+  }, [fetchDocumentos, searchQuery]);
+
+  function getDocTipo(tipo: string): DocTipo {
+    const lower = tipo.toLowerCase();
+    if (lower.includes("escrito") || lower.includes("demanda") || lower.includes("recurso") || lower.includes("contestacion")) return "escrito";
+    if (lower.includes("contrato") || lower.includes("escritura")) return "contrato";
+    if (lower.includes("sentencia")) return "sentencia";
+    if (lower.includes("plantilla")) return "plantilla";
+    return "otro";
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -210,6 +146,13 @@ export default function DocumentosPage() {
           </Link>
         </div>
       </div>
+
+      {/* Error */}
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* Search + Tabs */}
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
@@ -251,7 +194,12 @@ export default function DocumentosPage() {
 
         {/* Document Grid */}
         <div className="p-4">
-          {filteredDocs.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-12">
+              <Loader2 className="w-8 h-8 text-blue-500 mx-auto mb-3 animate-spin" />
+              <p className="text-sm text-gray-500">Cargando documentos...</p>
+            </div>
+          ) : documentos.length === 0 ? (
             <div className="text-center py-12">
               <FileText className="w-12 h-12 text-gray-300 dark:text-slate-600 mx-auto mb-3" />
               <p className="text-sm text-gray-500 dark:text-slate-400">
@@ -260,9 +208,12 @@ export default function DocumentosPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredDocs.map((doc) => {
-                const config = tipoConfig[doc.tipo];
+              {documentos.map((doc) => {
+                const docTipo = getDocTipo(doc.tipo);
+                const config = tipoConfig[docTipo];
                 const Icon = config.icon;
+                const causaLabel = doc.causa ? `${doc.causa.rol} - ${doc.causa.caratulado}` : undefined;
+                const clienteLabel = doc.cliente?.nombre;
                 return (
                   <Link
                     key={doc.id}
@@ -298,22 +249,22 @@ export default function DocumentosPage() {
                       <div className="flex items-center gap-1.5">
                         <Calendar className="w-3 h-3 text-gray-400" />
                         <span className="text-xs text-gray-500 dark:text-slate-400">
-                          {new Date(doc.fecha).toLocaleDateString("es-CL")}
+                          {new Date(doc.createdAt).toLocaleDateString("es-CL")}
                         </span>
                       </div>
-                      {doc.causa && (
+                      {causaLabel && (
                         <div className="flex items-center gap-1.5">
                           <Scale className="w-3 h-3 text-gray-400" />
                           <span className="text-xs text-gray-500 dark:text-slate-400 truncate">
-                            {doc.causa}
+                            {causaLabel}
                           </span>
                         </div>
                       )}
-                      {doc.cliente && (
+                      {clienteLabel && (
                         <div className="flex items-center gap-1.5">
                           <User className="w-3 h-3 text-gray-400" />
                           <span className="text-xs text-gray-500 dark:text-slate-400">
-                            {doc.cliente}
+                            {clienteLabel}
                           </span>
                         </div>
                       )}
@@ -321,7 +272,7 @@ export default function DocumentosPage() {
 
                     <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-slate-700">
                       <span className="text-xs text-gray-400 dark:text-slate-500">
-                        {doc.tamano}
+                        {doc.tipo}
                       </span>
                       <button
                         onClick={(e) => {

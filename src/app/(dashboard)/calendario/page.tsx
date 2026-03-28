@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -10,6 +10,7 @@ import {
   MapPin,
   Scale,
   X,
+  Loader2,
 } from "lucide-react";
 import {
   format,
@@ -32,14 +33,13 @@ type TipoEvento = "audiencia" | "plazo" | "vencimiento" | "reunion";
 interface Evento {
   id: string;
   titulo: string;
-  descripcion: string;
+  descripcion: string | null;
   tipo: TipoEvento;
   fechaInicio: string;
-  fechaFin?: string;
-  hora?: string;
-  lugar?: string;
-  causa?: string;
-  completado: boolean;
+  fechaFin?: string | null;
+  todoElDia?: boolean;
+  color?: string;
+  causa?: { id: string; rol: string; caratulado: string } | null;
 }
 
 const tipoConfig: Record<
@@ -76,138 +76,68 @@ const tipoConfig: Record<
   },
 };
 
-// Mock data: 12 events across current and next month
-const now = new Date();
-const y = now.getFullYear();
-const m = now.getMonth();
-
-const mockEventos: Evento[] = [
-  {
-    id: "1",
-    titulo: "Audiencia Preparatoria",
-    descripcion: "Audiencia preparatoria causa Gonzalez con Munoz",
-    tipo: "audiencia",
-    fechaInicio: new Date(y, m, 5, 9, 0).toISOString(),
-    hora: "09:00",
-    lugar: "1er Juzgado Civil de Santiago, Sala 3",
-    causa: "C-1234-2026 - Gonzalez con Munoz",
-    completado: false,
-  },
-  {
-    id: "2",
-    titulo: "Vencimiento Plazo Contestacion",
-    descripcion: "Ultimo dia para presentar contestacion de demanda",
-    tipo: "vencimiento",
-    fechaInicio: new Date(y, m, 8).toISOString(),
-    causa: "C-321-2026 - Lopez con Banco Nacional",
-    completado: false,
-  },
-  {
-    id: "3",
-    titulo: "Reunion con Cliente",
-    descripcion: "Revision de estrategia procesal con cliente Perez",
-    tipo: "reunion",
-    fechaInicio: new Date(y, m, 10, 15, 0).toISOString(),
-    hora: "15:00",
-    lugar: "Oficina Principal",
-    causa: "C-892-2025 - Perez con Inversiones SpA",
-    completado: false,
-  },
-  {
-    id: "4",
-    titulo: "Plazo Prueba Documental",
-    descripcion: "Presentar documentos en periodo probatorio",
-    tipo: "plazo",
-    fechaInicio: new Date(y, m, 12).toISOString(),
-    causa: "C-1234-2026 - Gonzalez con Munoz",
-    completado: false,
-  },
-  {
-    id: "5",
-    titulo: "Audiencia de Juicio Oral",
-    descripcion: "Audiencia de juicio oral laboral",
-    tipo: "audiencia",
-    fechaInicio: new Date(y, m, 15, 11, 0).toISOString(),
-    hora: "11:00",
-    lugar: "2do Juzgado de Letras del Trabajo, Sala 1",
-    causa: "L-456-2026 - Soto con Empresa Ltda.",
-    completado: false,
-  },
-  {
-    id: "6",
-    titulo: "Mediacion Familiar",
-    descripcion: "Sesion de mediacion por causa de alimentos",
-    tipo: "reunion",
-    fechaInicio: new Date(y, m, 18, 10, 0).toISOString(),
-    hora: "10:00",
-    lugar: "Centro de Mediacion Familiar",
-    causa: "F-789-2026 - Rodriguez con Rodriguez",
-    completado: false,
-  },
-  {
-    id: "7",
-    titulo: "Vencimiento Recurso Apelacion",
-    descripcion: "Ultimo dia para interponer recurso de apelacion",
-    tipo: "vencimiento",
-    fechaInicio: new Date(y, m, 20).toISOString(),
-    causa: "C-892-2025 - Perez con Inversiones SpA",
-    completado: false,
-  },
-  {
-    id: "8",
-    titulo: "Plazo Observaciones a la Prueba",
-    descripcion: "Presentar observaciones a la prueba rendida",
-    tipo: "plazo",
-    fechaInicio: new Date(y, m, 22).toISOString(),
-    causa: "C-1234-2026 - Gonzalez con Munoz",
-    completado: false,
-  },
-  {
-    id: "9",
-    titulo: "Audiencia Conciliacion",
-    descripcion: "Audiencia obligatoria de conciliacion",
-    tipo: "audiencia",
-    fechaInicio: new Date(y, m + 1, 3, 9, 30).toISOString(),
-    hora: "09:30",
-    lugar: "5to Juzgado Civil de Santiago, Sala 2",
-    causa: "C-321-2026 - Lopez con Banco Nacional",
-    completado: false,
-  },
-  {
-    id: "10",
-    titulo: "Reunion Equipo Legal",
-    descripcion: "Revision semanal de causas activas",
-    tipo: "reunion",
-    fechaInicio: new Date(y, m + 1, 7, 14, 0).toISOString(),
-    hora: "14:00",
-    lugar: "Sala de Reuniones",
-    completado: false,
-  },
-  {
-    id: "11",
-    titulo: "Vencimiento Inscripcion CBR",
-    descripcion: "Plazo para inscribir compraventa en Conservador",
-    tipo: "vencimiento",
-    fechaInicio: new Date(y, m + 1, 12).toISOString(),
-    completado: false,
-  },
-  {
-    id: "12",
-    titulo: "Audiencia de Lectura de Sentencia",
-    descripcion: "Lectura de sentencia definitiva",
-    tipo: "audiencia",
-    fechaInicio: new Date(y, m + 1, 15, 10, 0).toISOString(),
-    hora: "10:00",
-    lugar: "1er Juzgado Civil de Santiago, Sala 1",
-    causa: "C-1234-2026 - Gonzalez con Munoz",
-    completado: false,
-  },
-];
+interface CausaOption {
+  id: string;
+  rol: string;
+  caratulado: string;
+}
 
 export default function CalendarioPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [showNewEvent, setShowNewEvent] = useState(false);
+
+  const [eventos, setEventos] = useState<Evento[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // New event form state
+  const [newEvento, setNewEvento] = useState({
+    titulo: "",
+    tipo: "audiencia" as TipoEvento,
+    fecha: "",
+    horaInicio: "",
+    horaFin: "",
+    descripcion: "",
+    causaId: "",
+    lugar: "",
+  });
+  const [savingEvento, setSavingEvento] = useState(false);
+  const [causasOptions, setCausasOptions] = useState<CausaOption[]>([]);
+  const [session, setSession] = useState<{ user?: { id: string } } | null>(null);
+
+  const fetchEventos = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/eventos");
+      if (!res.ok) throw new Error("Error al cargar eventos");
+      const json = await res.json();
+      setEventos(json.data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchEventos();
+    // Load causas for the form selector and session
+    Promise.all([
+      fetch("/api/causas?limit=100").then((r) => r.json()),
+      fetch("/api/auth/session").then((r) => r.json()),
+    ]).then(([causasJson, sess]) => {
+      setCausasOptions(
+        (causasJson.data || []).map((c: CausaOption) => ({
+          id: c.id,
+          rol: c.rol,
+          caratulado: c.caratulado,
+        }))
+      );
+      setSession(sess);
+    }).catch(() => {});
+  }, [fetchEventos]);
 
   const calendarDays = useMemo(() => {
     const monthStart = startOfMonth(currentMonth);
@@ -225,22 +155,89 @@ export default function CalendarioPage() {
   }, [currentMonth]);
 
   const getEventsForDay = (day: Date) =>
-    mockEventos.filter((e) => isSameDay(parseISO(e.fechaInicio), day));
+    eventos.filter((e) => isSameDay(parseISO(e.fechaInicio), day));
 
   const selectedDayEvents = selectedDay ? getEventsForDay(selectedDay) : [];
 
   const upcomingEvents = useMemo(() => {
     const today = new Date();
-    return mockEventos
+    return eventos
       .filter((e) => parseISO(e.fechaInicio) >= today)
       .sort(
         (a, b) =>
           parseISO(a.fechaInicio).getTime() - parseISO(b.fechaInicio).getTime()
       )
       .slice(0, 5);
-  }, []);
+  }, [eventos]);
 
   const diasSemana = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
+
+  function getEventHora(evento: Evento): string | undefined {
+    try {
+      const d = parseISO(evento.fechaInicio);
+      const h = d.getHours();
+      const m = d.getMinutes();
+      if (h === 0 && m === 0) return undefined;
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    } catch {
+      return undefined;
+    }
+  }
+
+  function getEventCausaLabel(evento: Evento): string | undefined {
+    if (evento.causa) {
+      return `${evento.causa.rol} - ${evento.causa.caratulado}`;
+    }
+    return undefined;
+  }
+
+  async function handleSaveEvento() {
+    if (!newEvento.titulo || !newEvento.tipo || !newEvento.fecha) return;
+    setSavingEvento(true);
+    try {
+      const fechaInicio = newEvento.horaInicio
+        ? `${newEvento.fecha}T${newEvento.horaInicio}:00`
+        : `${newEvento.fecha}T00:00:00`;
+      const fechaFin =
+        newEvento.horaFin
+          ? `${newEvento.fecha}T${newEvento.horaFin}:00`
+          : undefined;
+
+      const res = await fetch("/api/eventos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          titulo: newEvento.titulo,
+          descripcion: newEvento.descripcion || undefined,
+          tipo: newEvento.tipo,
+          fechaInicio,
+          fechaFin,
+          todoElDia: !newEvento.horaInicio,
+          causaId: newEvento.causaId || undefined,
+          usuarioId: session?.user?.id || "",
+        }),
+      });
+
+      if (!res.ok) throw new Error("Error al crear evento");
+
+      setShowNewEvent(false);
+      setNewEvento({
+        titulo: "",
+        tipo: "audiencia",
+        fecha: "",
+        horaInicio: "",
+        horaFin: "",
+        descripcion: "",
+        causaId: "",
+        lugar: "",
+      });
+      fetchEventos();
+    } catch {
+      alert("Error al guardar el evento");
+    } finally {
+      setSavingEvento(false);
+    }
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -263,254 +260,272 @@ export default function CalendarioPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-        {/* Main Calendar */}
-        <div className="xl:col-span-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
-          {/* Month Navigation */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-slate-800">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white capitalize">
-              {format(currentMonth, "MMMM yyyy", { locale: es })}
-            </h2>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-                className="p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setCurrentMonth(new Date())}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 transition-colors"
-              >
-                Hoy
-              </button>
-              <button
-                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-                className="p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
+      {/* Error */}
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
-          {/* Tipo Legend */}
-          <div className="flex flex-wrap gap-4 px-6 py-3 border-b border-gray-50 dark:border-slate-800/50">
-            {(Object.entries(tipoConfig) as [TipoEvento, typeof tipoConfig.audiencia][]).map(
-              ([key, config]) => (
-                <div key={key} className="flex items-center gap-1.5">
-                  <div className={`w-2.5 h-2.5 rounded-full ${config.dot}`} />
-                  <span className="text-xs text-gray-500 dark:text-slate-400">
-                    {config.label}
-                  </span>
-                </div>
-              )
-            )}
-          </div>
-
-          {/* Calendar Grid */}
-          <div className="p-4">
-            {/* Day Headers */}
-            <div className="grid grid-cols-7 mb-2">
-              {diasSemana.map((dia) => (
-                <div
-                  key={dia}
-                  className="text-center text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider py-2"
+      {/* Loading */}
+      {loading ? (
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm p-12 text-center">
+          <Loader2 className="w-8 h-8 text-blue-500 mx-auto mb-3 animate-spin" />
+          <p className="text-gray-500 text-sm">Cargando eventos...</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+          {/* Main Calendar */}
+          <div className="xl:col-span-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
+            {/* Month Navigation */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-slate-800">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white capitalize">
+                {format(currentMonth, "MMMM yyyy", { locale: es })}
+              </h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                  className="p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
                 >
-                  {dia}
-                </div>
-              ))}
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => setCurrentMonth(new Date())}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 transition-colors"
+                >
+                  Hoy
+                </button>
+                <button
+                  onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                  className="p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            {/* Day Cells */}
-            <div className="grid grid-cols-7 gap-px bg-gray-100 dark:bg-slate-800 rounded-lg overflow-hidden">
-              {calendarDays.map((day, idx) => {
-                const dayEvents = getEventsForDay(day);
-                const isCurrentMonth = isSameMonth(day, currentMonth);
-                const isTodayDate = isToday(day);
-                const isSelected =
-                  selectedDay !== null && isSameDay(day, selectedDay);
+            {/* Tipo Legend */}
+            <div className="flex flex-wrap gap-4 px-6 py-3 border-b border-gray-50 dark:border-slate-800/50">
+              {(Object.entries(tipoConfig) as [TipoEvento, typeof tipoConfig.audiencia][]).map(
+                ([key, config]) => (
+                  <div key={key} className="flex items-center gap-1.5">
+                    <div className={`w-2.5 h-2.5 rounded-full ${config.dot}`} />
+                    <span className="text-xs text-gray-500 dark:text-slate-400">
+                      {config.label}
+                    </span>
+                  </div>
+                )
+              )}
+            </div>
 
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => setSelectedDay(day)}
-                    className={`
-                      min-h-[90px] p-1.5 text-left flex flex-col transition-colors
-                      ${isCurrentMonth ? "bg-white dark:bg-slate-900" : "bg-gray-50 dark:bg-slate-950"}
-                      ${isSelected ? "ring-2 ring-blue-500 ring-inset" : ""}
-                      hover:bg-blue-50 dark:hover:bg-slate-800/80
-                    `}
+            {/* Calendar Grid */}
+            <div className="p-4">
+              {/* Day Headers */}
+              <div className="grid grid-cols-7 mb-2">
+                {diasSemana.map((dia) => (
+                  <div
+                    key={dia}
+                    className="text-center text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider py-2"
                   >
-                    <span
+                    {dia}
+                  </div>
+                ))}
+              </div>
+
+              {/* Day Cells */}
+              <div className="grid grid-cols-7 gap-px bg-gray-100 dark:bg-slate-800 rounded-lg overflow-hidden">
+                {calendarDays.map((day, idx) => {
+                  const dayEvents = getEventsForDay(day);
+                  const isCurrentMonth = isSameMonth(day, currentMonth);
+                  const isTodayDate = isToday(day);
+                  const isSelected =
+                    selectedDay !== null && isSameDay(day, selectedDay);
+
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => setSelectedDay(day)}
                       className={`
-                        inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-medium mb-0.5
-                        ${isTodayDate ? "bg-blue-600 text-white" : ""}
-                        ${!isTodayDate && isCurrentMonth ? "text-gray-900 dark:text-white" : ""}
-                        ${!isTodayDate && !isCurrentMonth ? "text-gray-300 dark:text-slate-600" : ""}
+                        min-h-[90px] p-1.5 text-left flex flex-col transition-colors
+                        ${isCurrentMonth ? "bg-white dark:bg-slate-900" : "bg-gray-50 dark:bg-slate-950"}
+                        ${isSelected ? "ring-2 ring-blue-500 ring-inset" : ""}
+                        hover:bg-blue-50 dark:hover:bg-slate-800/80
                       `}
                     >
-                      {format(day, "d")}
-                    </span>
-                    <div className="flex flex-col gap-0.5 overflow-hidden flex-1">
-                      {dayEvents.slice(0, 3).map((event) => {
-                        const config = tipoConfig[event.tipo];
+                      <span
+                        className={`
+                          inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-medium mb-0.5
+                          ${isTodayDate ? "bg-blue-600 text-white" : ""}
+                          ${!isTodayDate && isCurrentMonth ? "text-gray-900 dark:text-white" : ""}
+                          ${!isTodayDate && !isCurrentMonth ? "text-gray-300 dark:text-slate-600" : ""}
+                        `}
+                      >
+                        {format(day, "d")}
+                      </span>
+                      <div className="flex flex-col gap-0.5 overflow-hidden flex-1">
+                        {dayEvents.slice(0, 3).map((event) => {
+                          const config = tipoConfig[event.tipo] || tipoConfig.reunion;
+                          const hora = getEventHora(event);
+                          return (
+                            <div
+                              key={event.id}
+                              className={`
+                                text-[10px] font-medium px-1.5 py-0.5 rounded truncate
+                                ${config.bg} ${config.text}
+                              `}
+                              title={event.titulo}
+                            >
+                              {hora && (
+                                <span className="font-semibold">
+                                  {hora}{" "}
+                                </span>
+                              )}
+                              {event.titulo}
+                            </div>
+                          );
+                        })}
+                        {dayEvents.length > 3 && (
+                          <span className="text-[10px] text-gray-400 dark:text-slate-500 px-1">
+                            +{dayEvents.length - 3} mas
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Selected Day Events */}
+            {selectedDay && (
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-slate-800">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white capitalize">
+                    {format(selectedDay, "EEEE d MMMM", { locale: es })}
+                  </h3>
+                  <button
+                    onClick={() => setSelectedDay(null)}
+                    className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="p-4">
+                  {selectedDayEvents.length === 0 ? (
+                    <p className="text-sm text-gray-400 dark:text-slate-500 text-center py-4">
+                      Sin eventos para este dia
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedDayEvents.map((event) => {
+                        const config = tipoConfig[event.tipo] || tipoConfig.reunion;
+                        const hora = getEventHora(event);
+                        const causaLabel = getEventCausaLabel(event);
                         return (
                           <div
                             key={event.id}
-                            className={`
-                              text-[10px] font-medium px-1.5 py-0.5 rounded truncate
-                              ${config.bg} ${config.text}
-                            `}
-                            title={event.titulo}
+                            className={`p-3 rounded-lg border ${config.bg} ${config.border}`}
                           >
-                            {event.hora && (
-                              <span className="font-semibold">
-                                {event.hora}{" "}
-                              </span>
-                            )}
-                            {event.titulo}
+                            <div className="flex items-start gap-2">
+                              <div
+                                className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${config.dot}`}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p
+                                  className={`text-sm font-semibold ${config.text}`}
+                                >
+                                  {event.titulo}
+                                </p>
+                                {event.descripcion && (
+                                  <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                                    {event.descripcion}
+                                  </p>
+                                )}
+                                {hora && (
+                                  <div className="flex items-center gap-1 mt-1.5">
+                                    <Clock className="w-3 h-3 text-gray-400" />
+                                    <span className="text-xs text-gray-600 dark:text-slate-300">
+                                      {hora}
+                                    </span>
+                                  </div>
+                                )}
+                                {causaLabel && (
+                                  <div className="flex items-center gap-1 mt-1">
+                                    <Scale className="w-3 h-3 text-gray-400" />
+                                    <span className="text-xs text-gray-600 dark:text-slate-300">
+                                      {causaLabel}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         );
                       })}
-                      {dayEvents.length > 3 && (
-                        <span className="text-[10px] text-gray-400 dark:text-slate-500 px-1">
-                          +{dayEvents.length - 3} mas
-                        </span>
-                      )}
                     </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Selected Day Events */}
-          {selectedDay && (
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-slate-800">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white capitalize">
-                  {format(selectedDay, "EEEE d MMMM", { locale: es })}
-                </h3>
-                <button
-                  onClick={() => setSelectedDay(null)}
-                  className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                  )}
+                </div>
               </div>
-              <div className="p-4">
-                {selectedDayEvents.length === 0 ? (
-                  <p className="text-sm text-gray-400 dark:text-slate-500 text-center py-4">
-                    Sin eventos para este dia
-                  </p>
+            )}
+
+            {/* Upcoming Events */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
+              <div className="px-5 py-4 border-b border-gray-100 dark:border-slate-800">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Proximos Eventos
+                </h3>
+              </div>
+              <div className="divide-y divide-gray-50 dark:divide-slate-800/50">
+                {upcomingEvents.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-6">Sin eventos próximos</p>
                 ) : (
-                  <div className="space-y-3">
-                    {selectedDayEvents.map((event) => {
-                      const config = tipoConfig[event.tipo];
-                      return (
-                        <div
-                          key={event.id}
-                          className={`p-3 rounded-lg border ${config.bg} ${config.border}`}
-                        >
-                          <div className="flex items-start gap-2">
-                            <div
-                              className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${config.dot}`}
-                            />
-                            <div className="min-w-0 flex-1">
-                              <p
-                                className={`text-sm font-semibold ${config.text}`}
-                              >
-                                {event.titulo}
+                  upcomingEvents.map((event) => {
+                    const config = tipoConfig[event.tipo] || tipoConfig.reunion;
+                    const hora = getEventHora(event);
+                    const causaLabel = getEventCausaLabel(event);
+                    return (
+                      <div
+                        key={event.id}
+                        className="px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <div
+                            className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${config.dot}`}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                              {event.titulo}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                              {format(parseISO(event.fechaInicio), "EEE d MMM", {
+                                locale: es,
+                              })}
+                              {hora && ` - ${hora}`}
+                            </p>
+                            {causaLabel && (
+                              <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5 truncate">
+                                {causaLabel}
                               </p>
-                              <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
-                                {event.descripcion}
-                              </p>
-                              {event.hora && (
-                                <div className="flex items-center gap-1 mt-1.5">
-                                  <Clock className="w-3 h-3 text-gray-400" />
-                                  <span className="text-xs text-gray-600 dark:text-slate-300">
-                                    {event.hora}
-                                  </span>
-                                </div>
-                              )}
-                              {event.lugar && (
-                                <div className="flex items-center gap-1 mt-1">
-                                  <MapPin className="w-3 h-3 text-gray-400" />
-                                  <span className="text-xs text-gray-600 dark:text-slate-300">
-                                    {event.lugar}
-                                  </span>
-                                </div>
-                              )}
-                              {event.causa && (
-                                <div className="flex items-center gap-1 mt-1">
-                                  <Scale className="w-3 h-3 text-gray-400" />
-                                  <span className="text-xs text-gray-600 dark:text-slate-300">
-                                    {event.causa}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
+                            )}
                           </div>
+                          <span
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${config.bg} ${config.text}`}
+                          >
+                            {config.label}
+                          </span>
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
-          )}
-
-          {/* Upcoming Events */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm">
-            <div className="px-5 py-4 border-b border-gray-100 dark:border-slate-800">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-                Proximos Eventos
-              </h3>
-            </div>
-            <div className="divide-y divide-gray-50 dark:divide-slate-800/50">
-              {upcomingEvents.map((event) => {
-                const config = tipoConfig[event.tipo];
-                return (
-                  <div
-                    key={event.id}
-                    className="px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <div
-                        className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${config.dot}`}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                          {event.titulo}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
-                          {format(parseISO(event.fechaInicio), "EEE d MMM", {
-                            locale: es,
-                          })}
-                          {event.hora && ` - ${event.hora}`}
-                        </p>
-                        {event.causa && (
-                          <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5 truncate">
-                            {event.causa}
-                          </p>
-                        )}
-                      </div>
-                      <span
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${config.bg} ${config.text}`}
-                      >
-                        {config.label}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* New Event Modal */}
       {showNewEvent && (
@@ -538,6 +553,8 @@ export default function CalendarioPage() {
                 </label>
                 <input
                   type="text"
+                  value={newEvento.titulo}
+                  onChange={(e) => setNewEvento((p) => ({ ...p, titulo: e.target.value }))}
                   placeholder="Ej: Audiencia Preparatoria"
                   className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
@@ -547,7 +564,11 @@ export default function CalendarioPage() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">
                     Tipo
                   </label>
-                  <select className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                  <select
+                    value={newEvento.tipo}
+                    onChange={(e) => setNewEvento((p) => ({ ...p, tipo: e.target.value as TipoEvento }))}
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
                     <option value="audiencia">Audiencia</option>
                     <option value="plazo">Plazo</option>
                     <option value="vencimiento">Vencimiento</option>
@@ -560,6 +581,8 @@ export default function CalendarioPage() {
                   </label>
                   <input
                     type="date"
+                    value={newEvento.fecha}
+                    onChange={(e) => setNewEvento((p) => ({ ...p, fecha: e.target.value }))}
                     className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
@@ -571,6 +594,8 @@ export default function CalendarioPage() {
                   </label>
                   <input
                     type="time"
+                    value={newEvento.horaInicio}
+                    onChange={(e) => setNewEvento((p) => ({ ...p, horaInicio: e.target.value }))}
                     className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
@@ -580,6 +605,8 @@ export default function CalendarioPage() {
                   </label>
                   <input
                     type="time"
+                    value={newEvento.horaFin}
+                    onChange={(e) => setNewEvento((p) => ({ ...p, horaFin: e.target.value }))}
                     className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
@@ -590,6 +617,8 @@ export default function CalendarioPage() {
                 </label>
                 <textarea
                   rows={3}
+                  value={newEvento.descripcion}
+                  onChange={(e) => setNewEvento((p) => ({ ...p, descripcion: e.target.value }))}
                   placeholder="Detalles del evento..."
                   className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                 />
@@ -598,13 +627,17 @@ export default function CalendarioPage() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">
                   Causa asociada
                 </label>
-                <select className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <select
+                  value={newEvento.causaId}
+                  onChange={(e) => setNewEvento((p) => ({ ...p, causaId: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
                   <option value="">Sin causa asociada</option>
-                  <option value="1">C-1234-2026 - Gonzalez con Munoz</option>
-                  <option value="2">C-892-2025 - Perez con Inversiones SpA</option>
-                  <option value="3">L-456-2026 - Soto con Empresa Ltda.</option>
-                  <option value="4">F-789-2026 - Rodriguez con Rodriguez</option>
-                  <option value="5">C-321-2026 - Lopez con Banco Nacional</option>
+                  {causasOptions.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.rol} - {c.caratulado}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -613,6 +646,8 @@ export default function CalendarioPage() {
                 </label>
                 <input
                   type="text"
+                  value={newEvento.lugar}
+                  onChange={(e) => setNewEvento((p) => ({ ...p, lugar: e.target.value }))}
                   placeholder="Ej: 1er Juzgado Civil, Sala 3"
                   className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
@@ -626,10 +661,12 @@ export default function CalendarioPage() {
                 Cancelar
               </button>
               <button
-                onClick={() => setShowNewEvent(false)}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-sm shadow-blue-600/20 transition-colors"
+                onClick={handleSaveEvento}
+                disabled={savingEvento || !newEvento.titulo || !newEvento.fecha}
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-semibold rounded-xl shadow-sm shadow-blue-600/20 transition-colors inline-flex items-center gap-2"
               >
-                Guardar Evento
+                {savingEvento && <Loader2 className="w-4 h-4 animate-spin" />}
+                {savingEvento ? "Guardando..." : "Guardar Evento"}
               </button>
             </div>
           </div>

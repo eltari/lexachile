@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { conservadorScraper } from "@/lib/scraping/conservador";
+import { cache } from "@/lib/cache";
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,13 +9,24 @@ export async function POST(request: NextRequest) {
 
     switch (accion) {
       case "buscarPropiedad": {
+        const cacheKey = `api:cbr:prop:${comuna}:${foja}:${numero}:${anno}`;
+        const cached = cache.get(cacheKey);
+        if (cached) {
+          return Response.json({ data: cached, cached: true });
+        }
+
         const resultado = await conservadorScraper.buscarPropiedad(
           comuna || "",
           foja || "",
           numero || "",
           anno || 0
         );
-        return Response.json({ data: resultado });
+        cache.set(cacheKey, resultado, 5 * 60 * 1000);
+        return Response.json({
+          data: resultado,
+          source: resultado.source,
+          cached: false,
+        });
       }
 
       case "buscarPorRut": {
@@ -24,8 +36,20 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
+
+        const cacheKey = `api:cbr:rut:${rut}`;
+        const cached = cache.get(cacheKey);
+        if (cached) {
+          return Response.json({ data: cached, cached: true });
+        }
+
         const resultado = await conservadorScraper.buscarPorRut(rut);
-        return Response.json({ data: resultado });
+        cache.set(cacheKey, resultado, 5 * 60 * 1000);
+        return Response.json({
+          data: resultado,
+          source: resultado.source,
+          cached: false,
+        });
       }
 
       case "buscarPorDireccion": {
@@ -35,11 +59,23 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
+
+        const cacheKey = `api:cbr:dir:${direccion}:${comuna}`;
+        const cached = cache.get(cacheKey);
+        if (cached) {
+          return Response.json({ data: cached, cached: true });
+        }
+
         const resultado = await conservadorScraper.buscarPorDireccion(
           direccion,
           comuna || ""
         );
-        return Response.json({ data: resultado });
+        cache.set(cacheKey, resultado, 5 * 60 * 1000);
+        return Response.json({
+          data: resultado,
+          source: resultado.source,
+          cached: false,
+        });
       }
 
       case "obtenerCertificado": {
@@ -50,7 +86,10 @@ export async function POST(request: NextRequest) {
           );
         }
         const certificado = await conservadorScraper.obtenerCertificado(inscripcion);
-        return Response.json({ data: certificado });
+        return Response.json({
+          data: certificado,
+          source: certificado.isReal ? "real" : "mock",
+        });
       }
 
       default:

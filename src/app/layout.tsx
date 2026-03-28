@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import SessionProvider from "@/components/providers/session-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,7 +30,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-gray-100">
-        {children}
+        <SessionProvider>{children}</SessionProvider>
       </body>
     </html>
   );

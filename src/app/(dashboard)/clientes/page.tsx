@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -12,101 +12,58 @@ import {
   Scale,
   Building2,
   User,
+  Loader2,
 } from "lucide-react";
 import { formatRut } from "@/lib/utils";
 
-interface Cliente {
+interface ClienteAPI {
   id: string;
   tipo: "natural" | "juridica";
   nombre: string;
   rut: string;
-  email: string;
-  telefono: string;
-  numCausas: number;
-  ciudad: string;
+  email: string | null;
+  telefono: string | null;
+  ciudad: string | null;
+  _count: { causas: number };
 }
-
-const mockClientes: Cliente[] = [
-  {
-    id: "1",
-    tipo: "natural",
-    nombre: "María González Soto",
-    rut: "12345678-9",
-    email: "m.gonzalez@gmail.com",
-    telefono: "+56 9 8765 4321",
-    numCausas: 2,
-    ciudad: "Santiago",
-  },
-  {
-    id: "2",
-    tipo: "natural",
-    nombre: "Carlos Muñoz Reyes",
-    rut: "15678901-2",
-    email: "carlos.munoz@hotmail.com",
-    telefono: "+56 9 1234 5678",
-    numCausas: 1,
-    ciudad: "Viña del Mar",
-  },
-  {
-    id: "3",
-    tipo: "natural",
-    nombre: "Pedro Soto Vargas",
-    rut: "10234567-K",
-    email: "pedro.soto@gmail.com",
-    telefono: "+56 9 5555 1234",
-    numCausas: 1,
-    ciudad: "Santiago",
-  },
-  {
-    id: "4",
-    tipo: "natural",
-    nombre: "Ana Ramírez López",
-    rut: "18765432-1",
-    email: "ana.ramirez@yahoo.com",
-    telefono: "+56 9 7777 8888",
-    numCausas: 1,
-    ciudad: "Concepción",
-  },
-  {
-    id: "5",
-    tipo: "juridica",
-    nombre: "Inversiones Austral SpA",
-    rut: "76543210-5",
-    email: "contacto@austral.cl",
-    telefono: "+56 2 2345 6789",
-    numCausas: 3,
-    ciudad: "Santiago",
-  },
-  {
-    id: "6",
-    tipo: "juridica",
-    nombre: "Constructora Pacífico S.A.",
-    rut: "96789012-3",
-    email: "legal@pacifico.cl",
-    telefono: "+56 2 9876 5432",
-    numCausas: 2,
-    ciudad: "Santiago",
-  },
-];
 
 export default function ClientesPage() {
   const [search, setSearch] = useState("");
-  const [filtroTipo, setFiltroTipo] = useState<"" | "natural" | "juridica">(
-    ""
-  );
+  const [filtroTipo, setFiltroTipo] = useState<"" | "natural" | "juridica">("");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
 
-  const filtered = useMemo(() => {
-    return mockClientes.filter((c) => {
-      const matchSearch =
-        !search ||
-        c.nombre.toLowerCase().includes(search.toLowerCase()) ||
-        c.rut.includes(search) ||
-        c.email.toLowerCase().includes(search.toLowerCase());
-      const matchTipo = !filtroTipo || c.tipo === filtroTipo;
-      return matchSearch && matchTipo;
-    });
+  const [clientes, setClientes] = useState<ClienteAPI[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const fetchClientes = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      if (filtroTipo) params.set("tipo", filtroTipo);
+      params.set("limit", "100");
+
+      const res = await fetch(`/api/clientes?${params.toString()}`);
+      if (!res.ok) throw new Error("Error al cargar los clientes");
+      const json = await res.json();
+      setClientes(json.data || []);
+      setTotal(json.pagination?.total || 0);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setLoading(false);
+    }
   }, [search, filtroTipo]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchClientes();
+    }, search ? 300 : 0);
+    return () => clearTimeout(timer);
+  }, [fetchClientes, search]);
 
   return (
     <div className="space-y-6">
@@ -115,8 +72,8 @@ export default function ClientesPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {filtered.length} cliente{filtered.length !== 1 ? "s" : ""}{" "}
-            registrado{filtered.length !== 1 ? "s" : ""}
+            {total} cliente{total !== 1 ? "s" : ""}{" "}
+            registrado{total !== 1 ? "s" : ""}
           </p>
         </div>
         <Link
@@ -175,8 +132,20 @@ export default function ClientesPage() {
         </div>
       </div>
 
+      {/* Error */}
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       {/* Content */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 text-center">
+          <Loader2 className="w-8 h-8 text-blue-500 mx-auto mb-3 animate-spin" />
+          <p className="text-gray-500 text-sm">Cargando clientes...</p>
+        </div>
+      ) : clientes.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 text-center">
           <User className="w-10 h-10 text-gray-300 mx-auto mb-3" />
           <p className="text-gray-500 font-medium">
@@ -188,7 +157,7 @@ export default function ClientesPage() {
         </div>
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((cliente) => (
+          {clientes.map((cliente) => (
             <Link
               key={cliente.id}
               href={`/clientes/${cliente.id}`}
@@ -237,21 +206,21 @@ export default function ClientesPage() {
               <div className="mt-4 pt-3 border-t border-gray-100 space-y-2">
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <Mail className="w-3.5 h-3.5 text-gray-400" />
-                  <span className="truncate">{cliente.email}</span>
+                  <span className="truncate">{cliente.email || "Sin email"}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <Phone className="w-3.5 h-3.5 text-gray-400" />
-                  <span>{cliente.telefono}</span>
+                  <span>{cliente.telefono || "Sin teléfono"}</span>
                 </div>
               </div>
               <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-sm text-gray-500">
                   <Scale className="w-3.5 h-3.5" />
                   <span>
-                    {cliente.numCausas} causa{cliente.numCausas !== 1 ? "s" : ""}
+                    {cliente._count.causas} causa{cliente._count.causas !== 1 ? "s" : ""}
                   </span>
                 </div>
-                <span className="text-xs text-gray-400">{cliente.ciudad}</span>
+                <span className="text-xs text-gray-400">{cliente.ciudad || ""}</span>
               </div>
             </Link>
           ))}
@@ -282,7 +251,7 @@ export default function ClientesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.map((cliente) => (
+              {clientes.map((cliente) => (
                 <tr
                   key={cliente.id}
                   className="hover:bg-gray-50 transition-colors"
@@ -310,14 +279,14 @@ export default function ClientesPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3.5 hidden md:table-cell text-gray-600">
-                    {cliente.email}
+                    {cliente.email || "-"}
                   </td>
                   <td className="px-4 py-3.5 hidden lg:table-cell text-gray-600">
-                    {cliente.telefono}
+                    {cliente.telefono || "-"}
                   </td>
                   <td className="px-4 py-3.5 text-center">
                     <span className="inline-flex items-center justify-center w-7 h-7 bg-gray-100 rounded-full text-xs font-semibold text-gray-700">
-                      {cliente.numCausas}
+                      {cliente._count.causas}
                     </span>
                   </td>
                 </tr>

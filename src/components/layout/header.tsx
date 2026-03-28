@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { signOut } from "next-auth/react";
 import {
   Search,
   Bell,
@@ -12,7 +13,26 @@ import {
   LogOut,
 } from "lucide-react";
 
-export default function Header() {
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+function getFirstName(name: string): string {
+  return name.split(" ")[0] || name;
+}
+
+interface HeaderProps {
+  userName: string;
+  userEmail: string;
+}
+
+export default function Header({ userName, userEmail }: HeaderProps) {
   const [darkMode, setDarkMode] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -21,6 +41,13 @@ export default function Header() {
     setDarkMode(!darkMode);
     document.documentElement.classList.toggle("dark");
   };
+
+  const handleLogout = () => {
+    signOut({ callbackUrl: "/login" });
+  };
+
+  const initials = getInitials(userName);
+  const firstName = getFirstName(userName);
 
   const notifications = [
     {
@@ -31,13 +58,13 @@ export default function Header() {
     },
     {
       id: 2,
-      text: "Documento firmado por cliente María González",
+      text: "Documento firmado por cliente",
       time: "Hace 30 min",
       unread: true,
     },
     {
       id: 3,
-      text: "Plazo vence mañana - Causa ROL 892-2025",
+      text: "Plazo vence manana - Causa ROL 892-2025",
       time: "Hace 2 horas",
       unread: false,
     },
@@ -57,7 +84,7 @@ export default function Header() {
             className="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-slate-800 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-slate-500 rounded-lg border border-transparent focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
           />
           <kbd className="absolute right-3 top-1/2 -translate-y-1/2 hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium text-gray-400 dark:text-slate-500 bg-white dark:bg-slate-700 rounded border border-gray-200 dark:border-slate-600">
-            ⌘K
+            Ctrl+K
           </kbd>
         </div>
       </div>
@@ -140,10 +167,10 @@ export default function Header() {
             className="flex items-center gap-2 p-1.5 pr-3 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
           >
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white">
-              AT
+              {initials}
             </div>
             <span className="hidden sm:block text-sm font-medium text-gray-700 dark:text-slate-300">
-              Alejandro
+              {firstName}
             </span>
             <ChevronDown className="w-3.5 h-3.5 text-gray-400 dark:text-slate-500" />
           </button>
@@ -152,10 +179,10 @@ export default function Header() {
             <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Alejandro Torres
+                  {userName}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-slate-400">
-                  alejandro@lexachile.cl
+                  {userEmail}
                 </p>
               </div>
               <div className="py-1">
@@ -165,13 +192,16 @@ export default function Header() {
                 </button>
                 <button className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
                   <Settings className="w-4 h-4" />
-                  Configuración
+                  Configuracion
                 </button>
               </div>
               <div className="border-t border-gray-100 dark:border-slate-700 py-1">
-                <button className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors">
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
+                >
                   <LogOut className="w-4 h-4" />
-                  Cerrar Sesión
+                  Cerrar Sesion
                 </button>
               </div>
             </div>

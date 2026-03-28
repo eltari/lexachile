@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import {
   Scale,
   LayoutDashboard,
@@ -30,9 +31,30 @@ const navItems = [
   { href: "/reportes", label: "Reportes", icon: BarChart3 },
 ];
 
-export default function Sidebar() {
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+interface SidebarProps {
+  userName: string;
+  userRole: string;
+}
+
+export default function Sidebar({ userName, userRole }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+
+  const handleLogout = () => {
+    signOut({ callbackUrl: "/login" });
+  };
+
+  const initials = getInitials(userName);
 
   return (
     <>
@@ -57,7 +79,7 @@ export default function Sidebar() {
                 LexaChile
               </h1>
               <p className="text-[10px] text-slate-400 uppercase tracking-widest">
-                Plataforma Jurídica
+                Plataforma Juridica
               </p>
             </div>
           )}
@@ -106,27 +128,29 @@ export default function Sidebar() {
           {!collapsed ? (
             <div className="flex items-center gap-3 p-2 rounded-lg bg-slate-800/50">
               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-sm font-bold text-white shrink-0">
-                AT
+                {initials}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white truncate">
-                  Alejandro Torres
+                  {userName}
                 </p>
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-600/30 text-blue-300 uppercase tracking-wider">
-                  Abogado
+                  {userRole}
                 </span>
               </div>
               <button
+                onClick={handleLogout}
                 className="p-1.5 rounded-md text-slate-500 hover:text-white hover:bg-slate-700 transition-colors"
-                title="Cerrar sesión"
+                title="Cerrar sesion"
               >
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
           ) : (
             <button
+              onClick={handleLogout}
               className="w-full flex justify-center p-2 rounded-md text-slate-500 hover:text-white hover:bg-slate-700 transition-colors"
-              title="Cerrar sesión"
+              title="Cerrar sesion"
             >
               <LogOut className="w-4 h-4" />
             </button>

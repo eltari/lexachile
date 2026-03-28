@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { pjudScraper } from "@/lib/scraping/pjud";
+import { cache } from "@/lib/cache";
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,8 +15,20 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
+
+        const cacheKey = `api:pjud:causa:${rol}:${tribunal || ""}`;
+        const cached = cache.get(cacheKey);
+        if (cached) {
+          return Response.json({ data: cached, cached: true });
+        }
+
         const causa = await pjudScraper.consultarCausa(rol, tribunal || "");
-        return Response.json({ data: causa });
+        if (causa) cache.set(cacheKey, causa, 5 * 60 * 1000);
+        return Response.json({
+          data: causa,
+          source: causa?.source || "mock",
+          cached: false,
+        });
       }
 
       case "buscarCausas": {
@@ -25,8 +38,20 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
+
+        const cacheKey = `api:pjud:rut:${rut}`;
+        const cached = cache.get(cacheKey);
+        if (cached) {
+          return Response.json({ data: cached, cached: true });
+        }
+
         const resultado = await pjudScraper.buscarCausas(rut);
-        return Response.json({ data: resultado });
+        cache.set(cacheKey, resultado, 5 * 60 * 1000);
+        return Response.json({
+          data: resultado,
+          source: resultado.source,
+          cached: false,
+        });
       }
 
       case "obtenerMovimientos": {
@@ -36,8 +61,20 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        const movimientos = await pjudScraper.obtenerMovimientos(rol);
-        return Response.json({ data: movimientos });
+
+        const cacheKey = `api:pjud:mov:${rol}`;
+        const cached = cache.get(cacheKey);
+        if (cached) {
+          return Response.json({ data: cached, cached: true });
+        }
+
+        const result = await pjudScraper.obtenerMovimientos(rol);
+        cache.set(cacheKey, result, 5 * 60 * 1000);
+        return Response.json({
+          data: result.movimientos,
+          source: result.source,
+          cached: false,
+        });
       }
 
       default:

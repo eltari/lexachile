@@ -1,20 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Save, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Save, X, Loader2 } from "lucide-react";
 import { materias, tribunales } from "@/lib/utils";
 
-const mockClientes = [
-  { id: "1", nombre: "María González Soto", rut: "12.345.678-9" },
-  { id: "2", nombre: "Carlos Muñoz Reyes", rut: "15.678.901-2" },
-  { id: "3", nombre: "Pedro Soto Vargas", rut: "10.234.567-K" },
-  { id: "4", nombre: "Ana Ramírez López", rut: "18.765.432-1" },
-  { id: "5", nombre: "Inversiones Austral SpA", rut: "76.543.210-5" },
-  { id: "6", nombre: "Constructora Pacífico S.A.", rut: "96.789.012-3" },
-];
+interface ClienteOption {
+  id: string;
+  nombre: string;
+  rut: string;
+}
 
 export default function NuevaCausaPage() {
+  const router = useRouter();
   const [form, setForm] = useState({
     rol: "",
     rit: "",
@@ -30,6 +29,40 @@ export default function NuevaCausaPage() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [apiError, setApiError] = useState("");
+  const [clientes, setClientes] = useState<ClienteOption[]>([]);
+  const [loadingClientes, setLoadingClientes] = useState(true);
+  const [session, setSession] = useState<{ user?: { id: string } } | null>(null);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [clientesRes, sessionRes] = await Promise.all([
+          fetch("/api/clientes?limit=100"),
+          fetch("/api/auth/session"),
+        ]);
+        if (clientesRes.ok) {
+          const json = await clientesRes.json();
+          setClientes(
+            (json.data || []).map((c: ClienteOption) => ({
+              id: c.id,
+              nombre: c.nombre,
+              rut: c.rut,
+            }))
+          );
+        }
+        if (sessionRes.ok) {
+          const sess = await sessionRes.json();
+          setSession(sess);
+        }
+      } catch {
+        // Silently handle
+      } finally {
+        setLoadingClientes(false);
+      }
+    }
+    loadData();
+  }, []);
 
   function handleChange(
     e: React.ChangeEvent<
@@ -63,10 +96,32 @@ export default function NuevaCausaPage() {
     e.preventDefault();
     if (!validate()) return;
     setSaving(true);
-    // Simulate save
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setSaving(false);
-    alert("Causa guardada correctamente (demo)");
+    setApiError("");
+
+    try {
+      const res = await fetch("/api/causas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          abogadoId: session?.user?.id || "",
+          cuantia: form.cuantia || undefined,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        setApiError(json.error || "Error al guardar la causa");
+        setSaving(false);
+        return;
+      }
+
+      router.push("/causas");
+    } catch {
+      setApiError("Error de conexión al guardar la causa");
+      setSaving(false);
+    }
   }
 
   const fieldClass = (name: string) =>
@@ -94,6 +149,13 @@ export default function NuevaCausaPage() {
           Complete los datos para registrar una nueva causa judicial
         </p>
       </div>
+
+      {/* API Error */}
+      {apiError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {apiError}
+        </div>
+      )}
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -276,19 +338,26 @@ export default function NuevaCausaPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Seleccionar Cliente <span className="text-red-500">*</span>
             </label>
-            <select
-              name="clienteId"
-              value={form.clienteId}
-              onChange={handleChange}
-              className={fieldClass("clienteId")}
-            >
-              <option value="">Seleccionar cliente</option>
-              {mockClientes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nombre} - {c.rut}
-                </option>
-              ))}
-            </select>
+            {loadingClientes ? (
+              <div className="flex items-center gap-2 py-2.5 text-sm text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Cargando clientes...
+              </div>
+            ) : (
+              <select
+                name="clienteId"
+                value={form.clienteId}
+                onChange={handleChange}
+                className={fieldClass("clienteId")}
+              >
+                <option value="">Seleccionar cliente</option>
+                {clientes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre} - {c.rut}
+                  </option>
+                ))}
+              </select>
+            )}
             {errors.clienteId && (
               <p className="mt-1 text-xs text-red-600">{errors.clienteId}</p>
             )}
@@ -328,7 +397,7 @@ export default function NuevaCausaPage() {
             disabled={saving}
             className="inline-flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Save className="w-4 h-4" />
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             {saving ? "Guardando..." : "Guardar Causa"}
           </button>
         </div>

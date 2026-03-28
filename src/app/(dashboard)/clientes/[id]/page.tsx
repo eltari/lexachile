@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -12,86 +12,49 @@ import {
   FileText,
   Scale,
   StickyNote,
-  Plus,
   Send,
+  Loader2,
 } from "lucide-react";
 import { formatRut, formatFechaCorta, estadosCausa } from "@/lib/utils";
 
 type EstadoCausa = keyof typeof estadosCausa;
 
-const mockCliente = {
-  id: "1",
-  tipo: "natural" as string,
-  nombre: "María González Soto",
-  rut: "12345678-9",
-  email: "m.gonzalez@gmail.com",
-  telefono: "+56 9 8765 4321",
-  direccion: "Av. Providencia 1234, Oficina 501",
-  comuna: "Providencia",
-  ciudad: "Santiago",
-  region: "Metropolitana",
-  giro: null,
-  representante: null,
-};
-
-const mockCausas = [
-  {
-    id: "1",
-    rol: "C-1234-2024",
-    caratulado: "González con Pérez",
-    materia: "Civil",
-    estado: "en_tramitacion" as EstadoCausa,
-    tribunal: "1° Juzgado Civil de Santiago",
-    fechaIngreso: "2024-03-15",
-  },
-  {
-    id: "2",
-    rol: "F-567-2023",
-    caratulado: "González con López",
-    materia: "Familia",
-    estado: "sentenciada" as EstadoCausa,
-    tribunal: "Juzgado de Familia de Santiago",
-    fechaIngreso: "2023-08-20",
-  },
-];
-
-const mockDocumentos = [
-  {
-    id: "1",
-    nombre: "Cédula de Identidad",
-    tipo: "Identificación",
-    fecha: "2024-01-10",
-  },
-  {
-    id: "2",
-    nombre: "Poder Simple",
-    tipo: "Poder",
-    fecha: "2024-03-14",
-  },
-  {
-    id: "3",
-    nombre: "Contrato de Prestación de Servicios",
-    tipo: "Contrato",
-    fecha: "2024-03-10",
-  },
-];
-
-const mockNotas = [
-  {
-    id: "1",
-    contenido:
-      "Cliente solicita reunión urgente para revisar estado de causa civil. Disponible martes y jueves en la tarde.",
-    autor: "Juan Tarifeno",
-    fecha: "2024-09-10T14:30:00",
-  },
-  {
-    id: "2",
-    contenido:
-      "Se envió informe de avance de causa por correo electrónico. Cliente conforme con el avance.",
-    autor: "Juan Tarifeno",
-    fecha: "2024-08-25T10:15:00",
-  },
-];
+interface ClienteDetail {
+  id: string;
+  tipo: string;
+  nombre: string;
+  rut: string;
+  email: string | null;
+  telefono: string | null;
+  direccion: string | null;
+  comuna: string | null;
+  ciudad: string | null;
+  region: string | null;
+  giro: string | null;
+  representante: string | null;
+  causas: Array<{
+    id: string;
+    rol: string;
+    caratulado: string;
+    materia: string;
+    estado: EstadoCausa;
+    tribunal: string;
+    createdAt: string;
+  }>;
+  documentos: Array<{
+    id: string;
+    nombre: string;
+    tipo: string;
+    createdAt: string;
+  }>;
+  notas: Array<{
+    id: string;
+    contenido: string;
+    createdAt: string;
+    autor: { id: string; name: string };
+  }>;
+  _count: { causas: number; documentos: number; notas: number };
+}
 
 type Tab = "causas" | "documentos" | "notas";
 
@@ -101,37 +64,122 @@ export default function ClienteDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const cliente = mockCliente;
+  const [cliente, setCliente] = useState<ClienteDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("causas");
   const [nuevaNota, setNuevaNota] = useState("");
+  const [savingNota, setSavingNota] = useState(false);
+  const [session, setSession] = useState<{ user?: { id: string } } | null>(null);
+
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      setError("");
+      try {
+        const [clienteRes, sessionRes] = await Promise.all([
+          fetch(`/api/clientes/${id}`),
+          fetch("/api/auth/session"),
+        ]);
+        if (!clienteRes.ok) {
+          if (clienteRes.status === 404) throw new Error("Cliente no encontrado");
+          throw new Error("Error al cargar el cliente");
+        }
+        const json = await clienteRes.json();
+        setCliente(json.data);
+        if (sessionRes.ok) {
+          setSession(await sessionRes.json());
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Error desconocido");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, [id]);
+
+  async function handleAddNote(e: React.FormEvent) {
+    e.preventDefault();
+    if (!nuevaNota.trim() || !session?.user?.id) return;
+    setSavingNota(true);
+    try {
+      const res = await fetch("/api/notas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contenido: nuevaNota.trim(),
+          clienteId: id,
+          autorId: session.user.id,
+        }),
+      });
+      if (!res.ok) throw new Error("Error al guardar la nota");
+      const json = await res.json();
+      setCliente((prev) =>
+        prev
+          ? {
+              ...prev,
+              notas: [json.data, ...prev.notas],
+              _count: { ...prev._count, notas: prev._count.notas + 1 },
+            }
+          : prev
+      );
+      setNuevaNota("");
+    } catch {
+      alert("Error al guardar la nota");
+    } finally {
+      setSavingNota(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 text-blue-500 mx-auto mb-3 animate-spin" />
+          <p className="text-gray-500 text-sm">Cargando cliente...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !cliente) {
+    return (
+      <div className="space-y-6">
+        <Link
+          href="/clientes"
+          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Volver a Clientes
+        </Link>
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+          <p className="text-red-700 font-medium">{error || "Cliente no encontrado"}</p>
+        </div>
+      </div>
+    );
+  }
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode; count: number }[] = [
     {
       key: "causas",
       label: "Causas",
       icon: <Scale className="w-4 h-4" />,
-      count: mockCausas.length,
+      count: cliente._count.causas,
     },
     {
       key: "documentos",
       label: "Documentos",
       icon: <FileText className="w-4 h-4" />,
-      count: mockDocumentos.length,
+      count: cliente._count.documentos,
     },
     {
       key: "notas",
       label: "Notas",
       icon: <StickyNote className="w-4 h-4" />,
-      count: mockNotas.length,
+      count: cliente._count.notas,
     },
   ];
-
-  function handleAddNote(e: React.FormEvent) {
-    e.preventDefault();
-    if (!nuevaNota.trim()) return;
-    alert("Nota agregada (demo)");
-    setNuevaNota("");
-  }
 
   return (
     <div className="space-y-6">
@@ -197,7 +245,7 @@ export default function ClienteDetailPage({
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Email</p>
-                  <p className="text-sm text-gray-900">{cliente.email}</p>
+                  <p className="text-sm text-gray-900">{cliente.email || "No registrado"}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -206,7 +254,7 @@ export default function ClienteDetailPage({
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Teléfono</p>
-                  <p className="text-sm text-gray-900">{cliente.telefono}</p>
+                  <p className="text-sm text-gray-900">{cliente.telefono || "No registrado"}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
@@ -215,11 +263,14 @@ export default function ClienteDetailPage({
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Dirección</p>
-                  <p className="text-sm text-gray-900">{cliente.direccion}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {cliente.comuna}, {cliente.ciudad} - Región{" "}
-                    {cliente.region}
-                  </p>
+                  <p className="text-sm text-gray-900">{cliente.direccion || "No registrada"}</p>
+                  {(cliente.comuna || cliente.ciudad || cliente.region) && (
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {[cliente.comuna, cliente.ciudad, cliente.region ? `Región ${cliente.region}` : null]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -278,63 +329,71 @@ export default function ClienteDetailPage({
             <div className="p-5">
               {activeTab === "causas" && (
                 <div className="space-y-3">
-                  {mockCausas.map((causa) => {
-                    const estado = estadosCausa[causa.estado];
-                    return (
-                      <Link
-                        key={causa.id}
-                        href={`/causas/${causa.id}`}
-                        className="flex items-center justify-between p-4 rounded-lg border border-gray-100 hover:border-blue-200 hover:bg-blue-50/30 transition-all group"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-semibold text-sm text-blue-600 group-hover:text-blue-800">
-                              {causa.rol}
-                            </span>
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${estado.color}`}
-                            >
-                              {estado.label}
-                            </span>
+                  {cliente.causas.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-4">Sin causas asociadas</p>
+                  ) : (
+                    cliente.causas.map((causa) => {
+                      const estado = estadosCausa[causa.estado] || { label: causa.estado, color: "bg-gray-100 text-gray-800" };
+                      return (
+                        <Link
+                          key={causa.id}
+                          href={`/causas/${causa.id}`}
+                          className="flex items-center justify-between p-4 rounded-lg border border-gray-100 hover:border-blue-200 hover:bg-blue-50/30 transition-all group"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-semibold text-sm text-blue-600 group-hover:text-blue-800">
+                                {causa.rol}
+                              </span>
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${estado.color}`}
+                              >
+                                {estado.label}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-700 mt-1">
+                              {causa.caratulado}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {causa.materia} &middot; {causa.tribunal}
+                            </p>
                           </div>
-                          <p className="text-sm text-gray-700 mt-1">
-                            {causa.caratulado}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {causa.materia} &middot; {causa.tribunal}
-                          </p>
-                        </div>
-                        <span className="text-xs text-gray-400">
-                          {formatFechaCorta(causa.fechaIngreso)}
-                        </span>
-                      </Link>
-                    );
-                  })}
+                          <span className="text-xs text-gray-400">
+                            {formatFechaCorta(causa.createdAt)}
+                          </span>
+                        </Link>
+                      );
+                    })
+                  )}
                 </div>
               )}
 
               {activeTab === "documentos" && (
                 <div className="divide-y divide-gray-100">
-                  {mockDocumentos.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="flex items-center justify-between py-3 group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center group-hover:bg-blue-50 transition-colors">
-                          <FileText className="w-4 h-4 text-gray-500 group-hover:text-blue-600 transition-colors" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {doc.nombre}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {doc.tipo} &middot; {formatFechaCorta(doc.fecha)}
-                          </p>
+                  {cliente.documentos.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-4">Sin documentos asociados</p>
+                  ) : (
+                    cliente.documentos.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center justify-between py-3 group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center group-hover:bg-blue-50 transition-colors">
+                            <FileText className="w-4 h-4 text-gray-500 group-hover:text-blue-600 transition-colors" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {doc.nombre}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {doc.tipo} &middot; {formatFechaCorta(doc.createdAt)}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               )}
 
@@ -354,30 +413,34 @@ export default function ClienteDetailPage({
                     />
                     <button
                       type="submit"
-                      disabled={!nuevaNota.trim()}
+                      disabled={!nuevaNota.trim() || savingNota}
                       className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      <Send className="w-4 h-4" />
+                      {savingNota ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                     </button>
                   </form>
 
                   {/* Notes list */}
                   <div className="space-y-3">
-                    {mockNotas.map((nota) => (
-                      <div
-                        key={nota.id}
-                        className="p-4 bg-amber-50 rounded-lg border border-amber-100"
-                      >
-                        <p className="text-sm text-gray-800">
-                          {nota.contenido}
-                        </p>
-                        <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
-                          <span className="font-medium">{nota.autor}</span>
-                          <span>&middot;</span>
-                          <span>{formatFechaCorta(nota.fecha)}</span>
+                    {cliente.notas.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-4">Sin notas</p>
+                    ) : (
+                      cliente.notas.map((nota) => (
+                        <div
+                          key={nota.id}
+                          className="p-4 bg-amber-50 rounded-lg border border-amber-100"
+                        >
+                          <p className="text-sm text-gray-800">
+                            {nota.contenido}
+                          </p>
+                          <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                            <span className="font-medium">{nota.autor?.name || "Usuario"}</span>
+                            <span>&middot;</span>
+                            <span>{formatFechaCorta(nota.createdAt)}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
               )}

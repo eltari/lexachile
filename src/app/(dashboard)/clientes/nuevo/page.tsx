@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Save, X, User, Building2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Save, X, User, Building2, Loader2 } from "lucide-react";
 import { validarRut, formatRut, regiones } from "@/lib/utils";
 
 export default function NuevoClientePage() {
+  const router = useRouter();
   const [tipo, setTipo] = useState<"natural" | "juridica">("natural");
   const [form, setForm] = useState({
     nombre: "",
@@ -21,7 +23,16 @@ export default function NuevoClientePage() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [apiError, setApiError] = useState("");
   const [rutFormatted, setRutFormatted] = useState("");
+  const [session, setSession] = useState<{ user?: { id: string } } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then((r) => r.json())
+      .then(setSession)
+      .catch(() => {});
+  }, []);
 
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -69,9 +80,41 @@ export default function NuevoClientePage() {
     e.preventDefault();
     if (!validate()) return;
     setSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setSaving(false);
-    alert("Cliente guardado correctamente (demo)");
+    setApiError("");
+
+    try {
+      const res = await fetch("/api/clientes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo,
+          nombre: form.nombre,
+          rut: formatRut(form.rut),
+          email: form.email || undefined,
+          telefono: form.telefono || undefined,
+          direccion: form.direccion || undefined,
+          comuna: form.comuna || undefined,
+          ciudad: form.ciudad || undefined,
+          region: form.region || undefined,
+          giro: form.giro || undefined,
+          representante: form.representante || undefined,
+          abogadoId: session?.user?.id || "",
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        setApiError(json.error || "Error al guardar el cliente");
+        setSaving(false);
+        return;
+      }
+
+      router.push("/clientes");
+    } catch {
+      setApiError("Error de conexión al guardar el cliente");
+      setSaving(false);
+    }
   }
 
   const fieldClass = (name: string) =>
@@ -99,6 +142,13 @@ export default function NuevoClientePage() {
           Complete los datos para registrar un nuevo cliente
         </p>
       </div>
+
+      {/* API Error */}
+      {apiError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {apiError}
+        </div>
+      )}
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -372,7 +422,7 @@ export default function NuevoClientePage() {
             disabled={saving}
             className="inline-flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Save className="w-4 h-4" />
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             {saving ? "Guardando..." : "Guardar Cliente"}
           </button>
         </div>

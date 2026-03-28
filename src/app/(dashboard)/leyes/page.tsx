@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   BookOpen,
   Search,
@@ -14,6 +14,10 @@ import {
   Scale,
   Calendar,
   Tag,
+  Loader2,
+  AlertCircle,
+  Database,
+  Globe,
 } from "lucide-react";
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
@@ -33,131 +37,6 @@ interface Ley {
   urlBCN: string;
   resumen: string;
 }
-
-// ─── Mock Data ──────────────────────────────────────────────────────────────
-
-const mockLeyes: Ley[] = [
-  {
-    id: "1",
-    numero: "20.720",
-    titulo: "Ley de Reorganización y Liquidación de Empresas y Personas",
-    tipo: "Ley",
-    fechaPublicacion: "2014-01-09",
-    fechaPromulgacion: "2013-12-30",
-    estado: "Vigente",
-    organismo: "Ministerio de Economía",
-    urlBCN: "https://www.bcn.cl/leychile/navegar?idNorma=1058072",
-    resumen: "Sustituye el régimen concursal vigente por una ley de reorganización y liquidación de activos de empresas y personas, y perfecciona el rol de la superintendencia del ramo.",
-  },
-  {
-    id: "2",
-    numero: "21.595",
-    titulo: "Ley de Delitos Económicos",
-    tipo: "Ley",
-    fechaPublicacion: "2023-08-17",
-    fechaPromulgacion: "2023-08-11",
-    estado: "Vigente",
-    organismo: "Ministerio de Justicia",
-    urlBCN: "https://www.bcn.cl/leychile/navegar?idNorma=1197185",
-    resumen: "Sistematiza los delitos económicos y atentados contra el medio ambiente, regula las penas accesorias, modifica diversos cuerpos legales que establecen delitos de carácter económico.",
-  },
-  {
-    id: "3",
-    numero: "19.968",
-    titulo: "Ley que crea los Tribunales de Familia",
-    tipo: "Ley",
-    fechaPublicacion: "2004-08-30",
-    fechaPromulgacion: "2004-08-25",
-    estado: "Vigente",
-    organismo: "Ministerio de Justicia",
-    urlBCN: "https://www.bcn.cl/leychile/navegar?idNorma=229557",
-    resumen: "Crea los tribunales de familia, establece su competencia, organización y procedimientos aplicables ante dichos tribunales.",
-  },
-  {
-    id: "4",
-    numero: "20.393",
-    titulo: "Responsabilidad Penal de las Personas Jurídicas",
-    tipo: "Ley",
-    fechaPublicacion: "2009-12-02",
-    fechaPromulgacion: "2009-11-25",
-    estado: "Vigente",
-    organismo: "Ministerio de Justicia",
-    urlBCN: "https://www.bcn.cl/leychile/navegar?idNorma=1008668",
-    resumen: "Establece la responsabilidad penal de las personas jurídicas en los delitos de lavado de activos, financiamiento del terrorismo y cohecho a funcionario público.",
-  },
-  {
-    id: "5",
-    numero: "18.010",
-    titulo: "Ley sobre Operaciones de Crédito de Dinero",
-    tipo: "Ley",
-    fechaPublicacion: "1981-06-27",
-    fechaPromulgacion: "1981-06-23",
-    estado: "Vigente",
-    organismo: "Ministerio de Hacienda",
-    urlBCN: "https://www.bcn.cl/leychile/navegar?idNorma=29528",
-    resumen: "Regula las operaciones de crédito de dinero, establece los intereses máximos convencionales y las sanciones por usura.",
-  },
-  {
-    id: "6",
-    numero: "19.496",
-    titulo: "Ley de Protección de los Derechos de los Consumidores",
-    tipo: "Ley",
-    fechaPublicacion: "1997-03-07",
-    fechaPromulgacion: "1997-02-28",
-    estado: "Vigente",
-    organismo: "Ministerio de Economía",
-    urlBCN: "https://www.bcn.cl/leychile/navegar?idNorma=61438",
-    resumen: "Establece normas sobre protección de los derechos de los consumidores, regulando relaciones entre proveedores y consumidores, infracciones y sanciones.",
-  },
-  {
-    id: "7",
-    numero: "20.609",
-    titulo: "Ley Zamudio — Establece Medidas contra la Discriminación",
-    tipo: "Ley",
-    fechaPublicacion: "2012-07-24",
-    fechaPromulgacion: "2012-07-12",
-    estado: "Vigente",
-    organismo: "Ministerio Secretaría General de Gobierno",
-    urlBCN: "https://www.bcn.cl/leychile/navegar?idNorma=1042092",
-    resumen: "Establece medidas contra la discriminación arbitraria, define la acción de no discriminación y establece un procedimiento especial para su tramitación.",
-  },
-  {
-    id: "8",
-    numero: "19.947",
-    titulo: "Ley de Matrimonio Civil",
-    tipo: "Ley",
-    fechaPublicacion: "2004-05-17",
-    fechaPromulgacion: "2004-05-07",
-    estado: "Modificada",
-    organismo: "Ministerio de Justicia",
-    urlBCN: "https://www.bcn.cl/leychile/navegar?idNorma=225128",
-    resumen: "Establece nueva ley de matrimonio civil, regulando la celebración del matrimonio, la separación judicial y el divorcio.",
-  },
-  {
-    id: "9",
-    numero: "21.430",
-    titulo: "Ley sobre Garantías y Protección Integral de los Derechos de la Niñez y Adolescencia",
-    tipo: "Ley",
-    fechaPublicacion: "2022-03-15",
-    fechaPromulgacion: "2022-03-10",
-    estado: "Vigente",
-    organismo: "Ministerio de Desarrollo Social",
-    urlBCN: "https://www.bcn.cl/leychile/navegar?idNorma=1173643",
-    resumen: "Tiene por objeto la garantía y protección integral de los derechos de los niños, niñas y adolescentes que se encuentren en el territorio nacional.",
-  },
-  {
-    id: "10",
-    numero: "18.046",
-    titulo: "Ley sobre Sociedades Anónimas",
-    tipo: "Ley",
-    fechaPublicacion: "1981-10-22",
-    fechaPromulgacion: "1981-10-20",
-    estado: "Derogada",
-    organismo: "Ministerio de Hacienda",
-    urlBCN: "https://www.bcn.cl/leychile/navegar?idNorma=29473",
-    resumen: "Establece las normas sobre sociedades anónimas abiertas y cerradas, su constitución, administración, juntas de accionistas y disolución. (Derogada por Ley 21.XXX).",
-  },
-];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -189,10 +68,10 @@ function TarjetaLey({ ley }: { ley: Ley }) {
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${tipoColor[ley.tipo]}`}>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${tipoColor[ley.tipo] || tipoColor.Ley}`}>
                 {ley.tipo} N° {ley.numero}
               </span>
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${estadoColor[ley.estado]}`}>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${estadoColor[ley.estado] || estadoColor.Vigente}`}>
                 {ley.estado === "Vigente" && <Check className="w-3 h-3 inline mr-0.5" />}
                 {ley.estado === "Derogada" && <X className="w-3 h-3 inline mr-0.5" />}
                 {ley.estado}
@@ -202,18 +81,22 @@ function TarjetaLey({ ley }: { ley: Ley }) {
               {ley.titulo}
             </h3>
             <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 dark:text-slate-400">
-              <span className="flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5" />
-                {new Date(ley.fechaPublicacion).toLocaleDateString("es-CL", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })}
-              </span>
-              <span className="flex items-center gap-1">
-                <Scale className="w-3.5 h-3.5" />
-                {ley.organismo}
-              </span>
+              {ley.fechaPublicacion && (
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5" />
+                  {new Date(ley.fechaPublicacion).toLocaleDateString("es-CL", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </span>
+              )}
+              {ley.organismo && (
+                <span className="flex items-center gap-1">
+                  <Scale className="w-3.5 h-3.5" />
+                  {ley.organismo}
+                </span>
+              )}
             </div>
           </div>
           <div className="shrink-0 mt-1">
@@ -228,37 +111,45 @@ function TarjetaLey({ ley }: { ley: Ley }) {
 
       {expandida && (
         <div className="px-5 pb-5 border-t border-gray-100 dark:border-slate-800 pt-4">
-          <div className="bg-gray-50 dark:bg-slate-800/50 rounded-xl p-4 mb-4">
-            <h4 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-              Resumen
-            </h4>
-            <p className="text-sm text-gray-700 dark:text-slate-300 leading-relaxed">
-              {ley.resumen}
-            </p>
-          </div>
+          {ley.resumen && (
+            <div className="bg-gray-50 dark:bg-slate-800/50 rounded-xl p-4 mb-4">
+              <h4 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                Resumen
+              </h4>
+              <p className="text-sm text-gray-700 dark:text-slate-300 leading-relaxed">
+                {ley.resumen}
+              </p>
+            </div>
+          )}
 
-          <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
-            <div>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Fecha de Promulgación</p>
-              <p className="font-medium text-gray-900 dark:text-white">
-                {new Date(ley.fechaPromulgacion).toLocaleDateString("es-CL", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </p>
+          {(ley.fechaPromulgacion || ley.fechaPublicacion) && (
+            <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+              {ley.fechaPromulgacion && (
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">Fecha de Promulgacion</p>
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {new Date(ley.fechaPromulgacion).toLocaleDateString("es-CL", {
+                      day: "2-digit",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </p>
+                </div>
+              )}
+              {ley.fechaPublicacion && (
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">Fecha de Publicacion</p>
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {new Date(ley.fechaPublicacion).toLocaleDateString("es-CL", {
+                      day: "2-digit",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </p>
+                </div>
+              )}
             </div>
-            <div>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Fecha de Publicación</p>
-              <p className="font-medium text-gray-900 dark:text-white">
-                {new Date(ley.fechaPublicacion).toLocaleDateString("es-CL", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </p>
-            </div>
-          </div>
+          )}
 
           <a
             href={ley.urlBCN}
@@ -275,26 +166,97 @@ function TarjetaLey({ ley }: { ley: Ley }) {
   );
 }
 
-// ─── Página Principal ───────────────────────────────────────────────────────
+// ─── Indicador de Fuente ───────────────────────────────────────────────────
+
+function IndicadorFuente({ source }: { source: "real" | "mock" | null }) {
+  if (!source) return null;
+
+  if (source === "real") {
+    return (
+      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-full text-xs font-medium text-emerald-700 dark:text-emerald-300">
+        <Globe className="w-3.5 h-3.5" />
+        Fuente: BCN (datos en vivo)
+      </div>
+    );
+  }
+
+  return (
+    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-full text-xs font-medium text-amber-700 dark:text-amber-300">
+      <Database className="w-3.5 h-3.5" />
+      Fuente: Datos de referencia
+    </div>
+  );
+}
+
+// ─── Pagina Principal ───────────────────────────────────────────────────────
 
 export default function LeyesPage() {
   const [busqueda, setBusqueda] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<TipoNorma | "">("");
   const [filtroEstado, setFiltroEstado] = useState<EstadoNorma | "">("");
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
+  const [leyes, setLeyes] = useState<Ley[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [source, setSource] = useState<"real" | "mock" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [buscado, setBuscado] = useState(false);
 
-  const leyesFiltradas = useMemo(() => {
-    return mockLeyes.filter((ley) => {
-      const matchBusqueda =
-        !busqueda ||
-        ley.titulo.toLowerCase().includes(busqueda.toLowerCase()) ||
-        ley.numero.includes(busqueda) ||
-        ley.resumen.toLowerCase().includes(busqueda.toLowerCase());
-      const matchTipo = !filtroTipo || ley.tipo === filtroTipo;
-      const matchEstado = !filtroEstado || ley.estado === filtroEstado;
-      return matchBusqueda && matchTipo && matchEstado;
-    });
-  }, [busqueda, filtroTipo, filtroEstado]);
+  const buscarLeyes = useCallback(async (query: string) => {
+    if (!query.trim()) {
+      setLeyes([]);
+      setSource(null);
+      setBuscado(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/scraping/bcn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accion: "buscarLey", query: query.trim() }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}`);
+      }
+
+      const json = await response.json();
+      setLeyes(json.data?.leyes || []);
+      setSource(json.source || json.data?.source || "mock");
+      setBuscado(true);
+    } catch (err) {
+      console.error("Error buscando leyes:", err);
+      setError("Error al buscar leyes. Intente nuevamente.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Cargar datos iniciales
+  useEffect(() => {
+    buscarLeyes("ley");
+  }, [buscarLeyes]);
+
+  // Buscar con debounce cuando cambia el texto
+  useEffect(() => {
+    if (!busqueda.trim()) return;
+
+    const timer = setTimeout(() => {
+      buscarLeyes(busqueda);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [busqueda, buscarLeyes]);
+
+  // Filtrar localmente por tipo y estado
+  const leyesFiltradas = leyes.filter((ley) => {
+    const matchTipo = !filtroTipo || ley.tipo === filtroTipo;
+    const matchEstado = !filtroEstado || ley.estado === filtroEstado;
+    return matchTipo && matchEstado;
+  });
 
   const tiposDisponibles: TipoNorma[] = ["Ley", "Decreto", "DFL", "DS", "DL"];
   const estadosDisponibles: EstadoNorma[] = ["Vigente", "Derogada", "Modificada"];
@@ -325,12 +287,27 @@ export default function LeyesPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar por número, título o contenido..."
+              placeholder="Buscar por numero, titulo o contenido..."
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") buscarLeyes(busqueda);
+              }}
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
             />
           </div>
+          <button
+            onClick={() => buscarLeyes(busqueda || "ley")}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl text-sm font-semibold hover:from-emerald-700 hover:to-teal-700 transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Search className="w-4 h-4" />
+            )}
+            Buscar
+          </button>
           <button
             onClick={() => setMostrarFiltros(!mostrarFiltros)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
@@ -398,33 +375,62 @@ export default function LeyesPage() {
         )}
       </div>
 
-      {/* Results Count */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500 dark:text-slate-400">
-          {leyesFiltradas.length} {leyesFiltradas.length === 1 ? "resultado" : "resultados"} encontrados
-        </p>
+      {/* Source indicator + Results Count */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-gray-500 dark:text-slate-400">
+            {loading
+              ? "Buscando..."
+              : `${leyesFiltradas.length} ${leyesFiltradas.length === 1 ? "resultado" : "resultados"} encontrados`}
+          </p>
+          <IndicadorFuente source={source} />
+        </div>
         {busqueda && (
           <button
             onClick={() => {
               setBusqueda("");
               setFiltroTipo("");
               setFiltroEstado("");
+              setLeyes([]);
+              setSource(null);
+              setBuscado(false);
             }}
             className="text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 font-medium"
           >
-            Limpiar búsqueda
+            Limpiar busqueda
           </button>
         )}
       </div>
 
+      {/* Error */}
+      {error && (
+        <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+          <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+          <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center justify-center py-16">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 text-emerald-500 animate-spin mx-auto mb-3" />
+            <p className="text-sm text-gray-500 dark:text-slate-400">Consultando BCN / LeyChile...</p>
+          </div>
+        </div>
+      )}
+
       {/* Results List */}
-      {leyesFiltradas.length > 0 ? (
+      {!loading && leyesFiltradas.length > 0 && (
         <div className="space-y-3">
           {leyesFiltradas.map((ley) => (
             <TarjetaLey key={ley.id} ley={ley} />
           ))}
         </div>
-      ) : (
+      )}
+
+      {/* Empty state */}
+      {!loading && leyesFiltradas.length === 0 && buscado && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="p-4 bg-gray-100 dark:bg-slate-800 rounded-2xl mb-4">
             <BookOpen className="w-10 h-10 text-gray-400 dark:text-slate-500" />
@@ -433,7 +439,22 @@ export default function LeyesPage() {
             Sin resultados
           </h3>
           <p className="text-sm text-gray-500 dark:text-slate-400 max-w-md">
-            No se encontraron leyes que coincidan con los criterios de búsqueda. Intente con otros términos o ajuste los filtros.
+            No se encontraron leyes que coincidan con los criterios de busqueda. Intente con otros terminos o ajuste los filtros.
+          </p>
+        </div>
+      )}
+
+      {/* Initial state */}
+      {!loading && !buscado && leyes.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="p-4 bg-gray-100 dark:bg-slate-800 rounded-2xl mb-4">
+            <Search className="w-10 h-10 text-gray-400 dark:text-slate-500" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-700 dark:text-slate-300 mb-1">
+            Buscar en la Biblioteca Legal
+          </h3>
+          <p className="text-sm text-gray-500 dark:text-slate-400 max-w-md">
+            Ingrese un termino de busqueda para consultar leyes, decretos y normativa chilena directamente desde la BCN.
           </p>
         </div>
       )}

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { bcnScraper } from "@/lib/scraping/bcn";
+import { cache } from "@/lib/cache";
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,8 +15,21 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
+
+        // Cache a nivel de API
+        const cacheKey = `api:bcn:buscar:${query}`;
+        const cached = cache.get(cacheKey);
+        if (cached) {
+          return Response.json({ data: cached, cached: true });
+        }
+
         const resultado = await bcnScraper.buscarLey(query);
-        return Response.json({ data: resultado });
+        cache.set(cacheKey, resultado, 5 * 60 * 1000);
+        return Response.json({
+          data: resultado,
+          source: resultado.source,
+          cached: false,
+        });
       }
 
       case "obtenerLey": {
@@ -25,8 +39,12 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
+
         const ley = await bcnScraper.obtenerLey(numero);
-        return Response.json({ data: ley });
+        return Response.json({
+          data: ley,
+          source: ley?.source || "mock",
+        });
       }
 
       case "buscarJurisprudencia": {
@@ -36,8 +54,12 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
+
         const resultado = await bcnScraper.buscarJurisprudencia(query);
-        return Response.json({ data: resultado });
+        return Response.json({
+          data: resultado,
+          source: resultado.source,
+        });
       }
 
       default:

@@ -2,8 +2,10 @@
  * Scraper para la Biblioteca del Congreso Nacional (BCN) / LeyChile
  * https://www.bcn.cl/leychile
  *
- * Módulo MOCK — en producción se usaría Playwright o la API de BCN.
+ * Intenta hacer fetch real a LeyChile. Si falla, retorna datos mock como fallback.
  */
+
+import { cache } from "@/lib/cache";
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -35,11 +37,32 @@ export interface JurisprudenciaBCN {
 export interface ResultadoBusquedaLeyes {
   leyes: LeyBCN[];
   total: number;
+  source: "real" | "mock";
 }
 
 export interface ResultadoBusquedaJurisprudencia {
   resultados: JurisprudenciaBCN[];
   total: number;
+  source: "real" | "mock";
+}
+
+// ─── Headers comunes ───────────────────────────────────────────────────────
+
+const FETCH_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "es-CL,es;q=0.9,en;q=0.5",
+};
+
+const FETCH_TIMEOUT = 10_000; // 10 segundos
+
+// ─── Utilidades de fetch ───────────────────────────────────────────────────
+
+function createAbortController(): { controller: AbortController; timeout: ReturnType<typeof setTimeout> } {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+  return { controller, timeout };
 }
 
 // ─── Datos Mock ─────────────────────────────────────────────────────────────
@@ -213,28 +236,264 @@ const mockJurisprudencia: JurisprudenciaBCN[] = [
   },
 ];
 
+// ─── Parser de HTML de LeyChile ────────────────────────────────────────────
+
+function parseLeyChileSearchResults(html: string): LeyBCN[] {
+  const results: LeyBCN[] = [];
+
+  try {
+    // Buscar bloques de resultados en el HTML de LeyChile
+    // El patrón busca links a normas con idNorma
+    const normaRegex = /idNorma=(\d+)[^>]*>([^<]+)</g;
+    let match;
+    let idx = 0;
+
+    while ((match = normaRegex.exec(html)) !== null && idx < 20) {
+      const idNorma = match[1];
+      const textoRaw = match[2].trim();
+
+      if (!textoRaw || textoRaw.length < 5) continue;
+
+      // Intentar extraer número de ley del texto
+      const numMatch = textoRaw.match(/(?:Ley|LEY|Decreto|DFL|DS|DL)\s*(?:N[°º]?\s*)?(\d[\d.]*)/i);
+      const numero = numMatch ? numMatch[1] : "";
+
+      // Detectar tipo de norma
+      let tipo: LeyBCN["tipo"] = "Ley";
+      if (/decreto\s+(?:con\s+fuerza\s+de\s+ley|fuerza\s+ley)/i.test(textoRaw)) tipo = "DFL";
+      else if (/decreto\s+supremo|^DS\b/i.test(textoRaw)) tipo = "DS";
+      else if (/decreto\s+ley|^DL\b/i.test(textoRaw)) tipo = "DL";
+      else if (/decreto/i.test(textoRaw) && !/ley/i.test(textoRaw)) tipo = "Decreto";
+
+      idx++;
+      results.push({
+        id: `bcn-${idNorma}`,
+        numero: numero || idNorma,
+        titulo: textoRaw.substring(0, 200),
+        tipo,
+        fechaPublicacion: "",
+        fechaPromulgacion: "",
+        estado: "Vigente",
+        organismo: "",
+        urlBCN: `https://www.bcn.cl/leychile/navegar?idNorma=${idNorma}`,
+        resumen: textoRaw,
+      });
+    }
+  } catch (err) {
+    console.error("[BCN] Error parseando resultados HTML:", err);
+  }
+
+  return results;
+}
+
+function parseLeyChileNormaPage(html: string, idNorma: string): LeyBCN | null {
+  try {
+    // Extraer título
+    const tituloMatch = html.match(/<h[12][^>]*class="[^"]*titulo[^"]*"[^>]*>([^<]+)</i)
+      || html.match(/<title>([^<]+)</i);
+    const titulo = tituloMatch ? tituloMatch[1].trim().replace(/\s+/g, " ") : "";
+
+    // Extraer fecha de publicación
+    const fechaPubMatch = html.match(/(?:Fecha\s+(?:de\s+)?[Pp]ublicaci[oó]n|FECHA PUBLICACION)[:\s]*(\d{2}[/-]\d{2}[/-]\d{4})/);
+    let fechaPublicacion = "";
+    if (fechaPubMatch) {
+      const parts = fechaPubMatch[1].split(/[/-]/);
+      fechaPublicacion = `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+
+    // Extraer fecha de promulgación
+    const fechaPromMatch = html.match(/(?:Fecha\s+(?:de\s+)?[Pp]romulgaci[oó]n|FECHA PROMULGACION)[:\s]*(\d{2}[/-]\d{2}[/-]\d{4})/);
+    let fechaPromulgacion = "";
+    if (fechaPromMatch) {
+      const parts = fechaPromMatch[1].split(/[/-]/);
+      fechaPromulgacion = `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+
+    // Extraer organismo
+    const orgMatch = html.match(/(?:Organismo|ORGANISMO)[:\s]*([^<\n]+)/);
+    const organismo = orgMatch ? orgMatch[1].trim() : "";
+
+    // Extraer estado (vigente, derogada, etc.)
+    let estado: LeyBCN["estado"] = "Vigente";
+    if (/derogad[ao]/i.test(html)) estado = "Derogada";
+    else if (/modificad[ao]/i.test(html)) estado = "Modificada";
+
+    // Extraer número
+    const numMatch = titulo.match(/(?:LEY|Ley|DECRETO|DFL|DS|DL)\s*(?:N[Uú°º]M(?:ERO)?\.?\s*)?(\d[\d.]*)/i)
+      || html.match(/(?:Número|NUMERO)\s*[:\s]*(\d[\d.]*)/);
+    const numero = numMatch ? numMatch[1] : idNorma;
+
+    // Tipo de norma
+    let tipo: LeyBCN["tipo"] = "Ley";
+    if (/DFL|decreto\s+(?:con\s+)?fuerza\s+(?:de\s+)?ley/i.test(titulo)) tipo = "DFL";
+    else if (/decreto\s+supremo|^DS\b/i.test(titulo)) tipo = "DS";
+    else if (/decreto\s+ley|^DL\b/i.test(titulo)) tipo = "DL";
+    else if (/decreto/i.test(titulo) && !/ley/i.test(titulo)) tipo = "Decreto";
+
+    // Extraer resumen/contenido parcial
+    const contenidoMatch = html.match(/<div[^>]*class="[^"]*texto[^"]*"[^>]*>([\s\S]{0,1000})/i);
+    let resumen = "";
+    if (contenidoMatch) {
+      resumen = contenidoMatch[1]
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&[a-z]+;/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .substring(0, 500);
+    }
+
+    if (!titulo && !numero) return null;
+
+    return {
+      id: `bcn-${idNorma}`,
+      numero,
+      titulo: titulo || `Norma ${numero}`,
+      tipo,
+      fechaPublicacion,
+      fechaPromulgacion,
+      estado,
+      organismo,
+      urlBCN: `https://www.bcn.cl/leychile/navegar?idNorma=${idNorma}`,
+      resumen,
+    };
+  } catch (err) {
+    console.error("[BCN] Error parseando norma:", err);
+    return null;
+  }
+}
+
 // ─── Clase Scraper ──────────────────────────────────────────────────────────
 
 export class BCNScraper {
-  // En producción se usaría Playwright o fetch a la API de BCN:
-  // private browser: Browser | null = null;
-  //
-  // async init() {
-  //   this.browser = await chromium.launch({ headless: true });
-  // }
-
   /**
    * Buscar leyes por texto libre.
-   *
-   * En producción:
-   *   await page.goto('https://www.bcn.cl/leychile/consulta/buscar');
-   *   await page.fill('#txtBuscar', query);
-   *   await page.click('#btnBuscar');
-   *   // Parsear resultados...
+   * Intenta fetch real a LeyChile, cae a mock si falla.
    */
   async buscarLey(query: string): Promise<ResultadoBusquedaLeyes> {
-    await this.delay(300);
+    const cacheKey = `bcn:buscar:${query.toLowerCase().trim()}`;
+    const cached = cache.get<ResultadoBusquedaLeyes>(cacheKey);
+    if (cached) return cached;
 
+    try {
+      const { controller, timeout } = createAbortController();
+
+      // Intentar la búsqueda en LeyChile
+      const url = `https://www.leychile.cl/Consulta/listaresultadosimple?cadena=${encodeURIComponent(query)}`;
+      const response = await fetch(url, {
+        headers: FETCH_HEADERS,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const html = await response.text();
+      const leyes = parseLeyChileSearchResults(html);
+
+      if (leyes.length > 0) {
+        const resultado: ResultadoBusquedaLeyes = {
+          leyes,
+          total: leyes.length,
+          source: "real",
+        };
+        cache.set(cacheKey, resultado);
+        console.log(`[BCN] Búsqueda real exitosa: "${query}" -> ${leyes.length} resultados`);
+        return resultado;
+      }
+
+      // Si no se encontraron resultados parseables, intentar URL alternativa
+      const url2 = `https://www.bcn.cl/leychile/consulta/busqueda?q=${encodeURIComponent(query)}`;
+      const { controller: ctrl2, timeout: t2 } = createAbortController();
+      const resp2 = await fetch(url2, {
+        headers: FETCH_HEADERS,
+        signal: ctrl2.signal,
+      });
+      clearTimeout(t2);
+
+      if (resp2.ok) {
+        const html2 = await resp2.text();
+        const leyes2 = parseLeyChileSearchResults(html2);
+        if (leyes2.length > 0) {
+          const resultado: ResultadoBusquedaLeyes = {
+            leyes: leyes2,
+            total: leyes2.length,
+            source: "real",
+          };
+          cache.set(cacheKey, resultado);
+          console.log(`[BCN] Búsqueda real (alt) exitosa: "${query}" -> ${leyes2.length} resultados`);
+          return resultado;
+        }
+      }
+
+      // Sin resultados reales, caer a mock
+      throw new Error("No se pudieron parsear resultados de LeyChile");
+    } catch (error) {
+      console.warn("[BCN] Fetch real falló, usando datos mock:", (error as Error).message);
+      return this.buscarLeyMock(query);
+    }
+  }
+
+  /**
+   * Obtener una ley específica por número o idNorma.
+   */
+  async obtenerLey(numero: string): Promise<(LeyBCN & { source: "real" | "mock" }) | null> {
+    const cacheKey = `bcn:norma:${numero}`;
+    const cached = cache.get<LeyBCN & { source: "real" | "mock" }>(cacheKey);
+    if (cached) return cached;
+
+    try {
+      // Primero intentar si es un idNorma directo
+      const idNorma = numero.replace(/\./g, "");
+      const { controller, timeout } = createAbortController();
+
+      const url = `https://www.leychile.cl/Navegar?idNorma=${idNorma}`;
+      const response = await fetch(url, {
+        headers: FETCH_HEADERS,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (response.ok) {
+        const html = await response.text();
+        const ley = parseLeyChileNormaPage(html, idNorma);
+        if (ley) {
+          const result = { ...ley, source: "real" as const };
+          cache.set(cacheKey, result);
+          console.log(`[BCN] Norma obtenida: ${numero}`);
+          return result;
+        }
+      }
+
+      throw new Error("No se pudo obtener la norma");
+    } catch (error) {
+      console.warn("[BCN] obtenerLey real falló, usando mock:", (error as Error).message);
+      const mockLey = mockLeyes.find((l) => l.numero === numero);
+      return mockLey ? { ...mockLey, source: "mock" as const } : null;
+    }
+  }
+
+  /**
+   * Buscar jurisprudencia por texto.
+   * PJUD no tiene API pública fácil para jurisprudencia, usamos mock con fallback informativo.
+   */
+  async buscarJurisprudencia(query: string): Promise<ResultadoBusquedaJurisprudencia> {
+    const cacheKey = `bcn:juris:${query.toLowerCase().trim()}`;
+    const cached = cache.get<ResultadoBusquedaJurisprudencia>(cacheKey);
+    if (cached) return cached;
+
+    // La búsqueda de jurisprudencia en BCN requiere interacción compleja.
+    // Usamos datos mock pero lo indicamos claramente.
+    const resultado = this.buscarJurisprudenciaMock(query);
+    cache.set(cacheKey, resultado);
+    return resultado;
+  }
+
+  // ─── Métodos Mock (fallback) ─────────────────────────────────────────────
+
+  private buscarLeyMock(query: string): ResultadoBusquedaLeyes {
     const q = query.toLowerCase();
     const filtradas = mockLeyes.filter(
       (l) =>
@@ -246,23 +505,11 @@ export class BCNScraper {
     return {
       leyes: filtradas.length > 0 ? filtradas : mockLeyes,
       total: filtradas.length > 0 ? filtradas.length : mockLeyes.length,
+      source: "mock",
     };
   }
 
-  /**
-   * Obtener una ley específica por número.
-   */
-  async obtenerLey(numero: string): Promise<LeyBCN | null> {
-    await this.delay(200);
-    return mockLeyes.find((l) => l.numero === numero) || null;
-  }
-
-  /**
-   * Buscar jurisprudencia por texto.
-   */
-  async buscarJurisprudencia(query: string): Promise<ResultadoBusquedaJurisprudencia> {
-    await this.delay(350);
-
+  private buscarJurisprudenciaMock(query: string): ResultadoBusquedaJurisprudencia {
     const q = query.toLowerCase();
     const filtrados = mockJurisprudencia.filter(
       (j) =>
@@ -274,11 +521,8 @@ export class BCNScraper {
     return {
       resultados: filtrados.length > 0 ? filtrados : mockJurisprudencia,
       total: filtrados.length > 0 ? filtrados.length : mockJurisprudencia.length,
+      source: "mock",
     };
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 

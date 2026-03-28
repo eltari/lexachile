@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Save,
@@ -13,6 +14,7 @@ import {
   Calendar,
   Tag,
   Clock,
+  Loader2,
 } from "lucide-react";
 
 const tiposDocumento = [
@@ -27,35 +29,107 @@ const tiposDocumento = [
   "Otro",
 ];
 
-const causasDisponibles = [
-  { id: "1", label: "C-1234-2026 - Gonzalez con Munoz" },
-  { id: "2", label: "C-892-2025 - Perez con Inversiones SpA" },
-  { id: "3", label: "L-456-2026 - Soto con Empresa Ltda." },
-  { id: "4", label: "F-789-2026 - Rodriguez con Rodriguez" },
-  { id: "5", label: "C-321-2026 - Lopez con Banco Nacional" },
-];
+interface CausaOption {
+  id: string;
+  rol: string;
+  caratulado: string;
+}
 
-const clientesDisponibles = [
-  { id: "1", label: "Juan Carlos Gonzalez (12.345.678-9)" },
-  { id: "2", label: "Roberto Perez (9.876.543-2)" },
-  { id: "3", label: "Maria Lopez (15.432.876-K)" },
-  { id: "4", label: "Carlos Rodriguez (8.765.432-1)" },
-  { id: "5", label: "Ana Fuentes (16.543.987-3)" },
-];
+interface ClienteOption {
+  id: string;
+  nombre: string;
+  rut: string;
+}
 
 export default function NuevoDocumentoPage() {
+  const router = useRouter();
   const [nombre, setNombre] = useState("");
   const [tipo, setTipo] = useState("");
   const [causaId, setCausaId] = useState("");
   const [clienteId, setClienteId] = useState("");
   const [contenido, setContenido] = useState("");
   const [saving, setSaving] = useState(false);
+  const [apiError, setApiError] = useState("");
+
+  const [causasOptions, setCausasOptions] = useState<CausaOption[]>([]);
+  const [clientesOptions, setClientesOptions] = useState<ClienteOption[]>([]);
+  const [loadingOptions, setLoadingOptions] = useState(true);
+  const [session, setSession] = useState<{ user?: { id: string; name?: string } } | null>(null);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [causasRes, clientesRes, sessionRes] = await Promise.all([
+          fetch("/api/causas?limit=100"),
+          fetch("/api/clientes?limit=100"),
+          fetch("/api/auth/session"),
+        ]);
+
+        if (causasRes.ok) {
+          const json = await causasRes.json();
+          setCausasOptions(
+            (json.data || []).map((c: CausaOption) => ({
+              id: c.id,
+              rol: c.rol,
+              caratulado: c.caratulado,
+            }))
+          );
+        }
+        if (clientesRes.ok) {
+          const json = await clientesRes.json();
+          setClientesOptions(
+            (json.data || []).map((c: ClienteOption) => ({
+              id: c.id,
+              nombre: c.nombre,
+              rut: c.rut,
+            }))
+          );
+        }
+        if (sessionRes.ok) {
+          setSession(await sessionRes.json());
+        }
+      } catch {
+        // Silently handle
+      } finally {
+        setLoadingOptions(false);
+      }
+    }
+    loadData();
+  }, []);
 
   const handleSave = async () => {
+    if (!nombre.trim() || !tipo) {
+      setApiError("El nombre y tipo son obligatorios");
+      return;
+    }
     setSaving(true);
-    // Simulated save
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    setSaving(false);
+    setApiError("");
+    try {
+      const res = await fetch("/api/documentos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nombre,
+          tipo,
+          contenido: contenido || undefined,
+          causaId: causaId || undefined,
+          clienteId: clienteId || undefined,
+          autorId: session?.user?.id || "",
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        setApiError(json.error || "Error al guardar el documento");
+        setSaving(false);
+        return;
+      }
+
+      router.push("/documentos");
+    } catch {
+      setApiError("Error de conexión al guardar");
+      setSaving(false);
+    }
   };
 
   const wordCount = contenido
@@ -101,11 +175,18 @@ export default function NuevoDocumentoPage() {
             disabled={saving}
             className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl text-sm font-semibold shadow-sm shadow-blue-600/20 transition-colors"
           >
-            <Save className="w-4 h-4" />
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             {saving ? "Guardando..." : "Guardar"}
           </button>
         </div>
       </div>
+
+      {/* API Error */}
+      {apiError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {apiError}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Editor Area */}
@@ -191,18 +272,25 @@ Puedes usar formato Markdown:
               <Scale className="w-4 h-4 text-gray-400" />
               Causa Asociada
             </h3>
-            <select
-              value={causaId}
-              onChange={(e) => setCausaId(e.target.value)}
-              className="w-full px-3 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">Sin causa asociada</option>
-              {causasDisponibles.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
+            {loadingOptions ? (
+              <div className="flex items-center gap-2 py-2 text-sm text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Cargando...
+              </div>
+            ) : (
+              <select
+                value={causaId}
+                onChange={(e) => setCausaId(e.target.value)}
+                className="w-full px-3 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Sin causa asociada</option>
+                {causasOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.rol} - {c.caratulado}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Linked Client */}
@@ -211,18 +299,25 @@ Puedes usar formato Markdown:
               <User className="w-4 h-4 text-gray-400" />
               Cliente
             </h3>
-            <select
-              value={clienteId}
-              onChange={(e) => setClienteId(e.target.value)}
-              className="w-full px-3 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">Sin cliente asociado</option>
-              {clientesDisponibles.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
+            {loadingOptions ? (
+              <div className="flex items-center gap-2 py-2 text-sm text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Cargando...
+              </div>
+            ) : (
+              <select
+                value={clienteId}
+                onChange={(e) => setClienteId(e.target.value)}
+                className="w-full px-3 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Sin cliente asociado</option>
+                {clientesOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre} ({c.rut})
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Document Info */}
@@ -256,7 +351,7 @@ Puedes usar formato Markdown:
                   Autor
                 </span>
                 <span className="text-xs font-medium text-gray-700 dark:text-slate-300">
-                  Alejandro Torres
+                  {session?.user?.name || "Usuario"}
                 </span>
               </div>
             </div>

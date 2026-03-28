@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -12,106 +12,25 @@ import {
   Pencil,
   Trash2,
   Scale,
+  Loader2,
 } from "lucide-react";
 import { estadosCausa, materias, tribunales, formatFechaCorta } from "@/lib/utils";
 
 type EstadoCausa = keyof typeof estadosCausa;
 
-interface Causa {
+interface CausaAPI {
   id: string;
   rol: string;
   caratulado: string;
   materia: string;
   estado: EstadoCausa;
   tribunal: string;
-  fechaIngreso: string;
-  cliente: string;
+  createdAt: string;
+  cliente: { id: string; nombre: string; rut: string } | null;
+  abogado: { id: string; name: string } | null;
 }
 
-const mockCausas: Causa[] = [
-  {
-    id: "1",
-    rol: "C-1234-2024",
-    caratulado: "González con Pérez",
-    materia: "Civil",
-    estado: "en_tramitacion",
-    tribunal: "1° Juzgado Civil de Santiago",
-    fechaIngreso: "2024-03-15",
-    cliente: "María González Soto",
-  },
-  {
-    id: "2",
-    rol: "C-5678-2024",
-    caratulado: "Muñoz con Banco Estado",
-    materia: "Civil",
-    estado: "ingresada",
-    tribunal: "2° Juzgado Civil de Santiago",
-    fechaIngreso: "2024-06-20",
-    cliente: "Carlos Muñoz Reyes",
-  },
-  {
-    id: "3",
-    rol: "T-892-2024",
-    caratulado: "Soto con Empresa ABC Ltda.",
-    materia: "Laboral",
-    estado: "en_tramitacion",
-    tribunal: "1° Juzgado de Letras del Trabajo de Santiago",
-    fechaIngreso: "2024-01-10",
-    cliente: "Pedro Soto Vargas",
-  },
-  {
-    id: "4",
-    rol: "F-345-2023",
-    caratulado: "Ramírez con Ramírez",
-    materia: "Familia",
-    estado: "sentenciada",
-    tribunal: "Juzgado de Familia de Santiago",
-    fechaIngreso: "2023-11-05",
-    cliente: "Ana Ramírez López",
-  },
-  {
-    id: "5",
-    rol: "C-7890-2023",
-    caratulado: "Inversiones Austral SpA con Lagos",
-    materia: "Civil",
-    estado: "archivada",
-    tribunal: "3° Juzgado Civil de Santiago",
-    fechaIngreso: "2023-05-18",
-    cliente: "Inversiones Austral SpA",
-  },
-  {
-    id: "6",
-    rol: "P-2156-2024",
-    caratulado: "Ministerio Público con Herrera",
-    materia: "Penal",
-    estado: "en_tramitacion",
-    tribunal: "Juzgado de Garantía de Santiago",
-    fechaIngreso: "2024-08-02",
-    cliente: "Rodrigo Herrera Díaz",
-  },
-  {
-    id: "7",
-    rol: "L-432-2024",
-    caratulado: "Constructora Pacífico S.A. con Serviu",
-    materia: "Administrativo",
-    estado: "ingresada",
-    tribunal: "Corte de Apelaciones de Santiago",
-    fechaIngreso: "2024-09-14",
-    cliente: "Constructora Pacífico S.A.",
-  },
-  {
-    id: "8",
-    rol: "C-9012-2024",
-    caratulado: "Transportes Andes Ltda. con SII",
-    materia: "Tributario",
-    estado: "en_tramitacion",
-    tribunal: "Corte Suprema",
-    fechaIngreso: "2024-04-25",
-    cliente: "Transportes Andes Ltda.",
-  },
-];
-
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 10;
 
 export default function CausasPage() {
   const [search, setSearch] = useState("");
@@ -121,25 +40,43 @@ export default function CausasPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
 
-  const filtered = useMemo(() => {
-    return mockCausas.filter((c) => {
-      const matchSearch =
-        !search ||
-        c.rol.toLowerCase().includes(search.toLowerCase()) ||
-        c.caratulado.toLowerCase().includes(search.toLowerCase()) ||
-        c.cliente.toLowerCase().includes(search.toLowerCase());
-      const matchMateria = !filtroMateria || c.materia === filtroMateria;
-      const matchEstado = !filtroEstado || c.estado === filtroEstado;
-      const matchTribunal = !filtroTribunal || c.tribunal === filtroTribunal;
-      return matchSearch && matchMateria && matchEstado && matchTribunal;
-    });
-  }, [search, filtroMateria, filtroEstado, filtroTribunal]);
+  const [causas, setCausas] = useState<CausaAPI[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
-  const paginated = filtered.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
+  const fetchCausas = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      if (filtroMateria) params.set("materia", filtroMateria);
+      if (filtroEstado) params.set("estado", filtroEstado);
+      if (filtroTribunal) params.set("tribunal", filtroTribunal);
+      params.set("page", String(currentPage));
+      params.set("limit", String(ITEMS_PER_PAGE));
+
+      const res = await fetch(`/api/causas?${params.toString()}`);
+      if (!res.ok) throw new Error("Error al cargar las causas");
+      const json = await res.json();
+      setCausas(json.data || []);
+      setTotal(json.pagination?.total || 0);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setLoading(false);
+    }
+  }, [search, filtroMateria, filtroEstado, filtroTribunal, currentPage]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchCausas();
+    }, search ? 300 : 0);
+    return () => clearTimeout(timer);
+  }, [fetchCausas, search]);
+
+  const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
 
   return (
     <div className="space-y-6">
@@ -150,8 +87,8 @@ export default function CausasPage() {
             Gestión de Causas
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            {filtered.length} causa{filtered.length !== 1 ? "s" : ""}{" "}
-            encontrada{filtered.length !== 1 ? "s" : ""}
+            {total} causa{total !== 1 ? "s" : ""}{" "}
+            encontrada{total !== 1 ? "s" : ""}
           </p>
         </div>
         <Link
@@ -242,6 +179,13 @@ export default function CausasPage() {
           </div>
         )}
 
+        {/* Error */}
+        {error && (
+          <div className="mx-4 mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -271,7 +215,14 @@ export default function CausasPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {paginated.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center">
+                    <Loader2 className="w-8 h-8 text-blue-500 mx-auto mb-3 animate-spin" />
+                    <p className="text-gray-500 text-sm">Cargando causas...</p>
+                  </td>
+                </tr>
+              ) : causas.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center">
                     <Scale className="w-10 h-10 text-gray-300 mx-auto mb-3" />
@@ -284,8 +235,8 @@ export default function CausasPage() {
                   </td>
                 </tr>
               ) : (
-                paginated.map((causa) => {
-                  const estado = estadosCausa[causa.estado];
+                causas.map((causa) => {
+                  const estado = estadosCausa[causa.estado] || { label: causa.estado, color: "bg-gray-100 text-gray-800" };
                   return (
                     <tr
                       key={causa.id}
@@ -304,7 +255,7 @@ export default function CausasPage() {
                           {causa.caratulado}
                         </div>
                         <div className="text-xs text-gray-500 mt-0.5">
-                          {causa.cliente}
+                          {causa.cliente?.nombre || "Sin cliente"}
                         </div>
                       </td>
                       <td className="px-4 py-3.5 hidden md:table-cell text-gray-600">
@@ -321,7 +272,7 @@ export default function CausasPage() {
                         {causa.tribunal}
                       </td>
                       <td className="px-4 py-3.5 hidden md:table-cell text-gray-500">
-                        {formatFechaCorta(causa.fechaIngreso)}
+                        {formatFechaCorta(causa.createdAt)}
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center justify-end gap-1">
@@ -364,9 +315,9 @@ export default function CausasPage() {
               </span>{" "}
               a{" "}
               <span className="font-medium">
-                {Math.min(currentPage * ITEMS_PER_PAGE, filtered.length)}
+                {Math.min(currentPage * ITEMS_PER_PAGE, total)}
               </span>{" "}
-              de <span className="font-medium">{filtered.length}</span>{" "}
+              de <span className="font-medium">{total}</span>{" "}
               resultados
             </p>
             <div className="flex items-center gap-1">

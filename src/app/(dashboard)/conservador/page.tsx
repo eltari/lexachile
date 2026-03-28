@@ -17,6 +17,9 @@ import {
   Loader2,
   Hash,
   Calendar,
+  Database,
+  Globe,
+  AlertCircle,
 } from "lucide-react";
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
@@ -70,155 +73,47 @@ interface Propiedad {
   comercio: RegistroComercio[];
   avaluoFiscal: string;
   destino: string;
+  isReal?: boolean;
 }
-
-// ─── Mock Data ──────────────────────────────────────────────────────────────
-
-const mockPropiedades: Propiedad[] = [
-  {
-    id: "prop-001",
-    propietario: "María Isabel González Fuentes",
-    rut: "12.345.678-5",
-    direccion: "Av. Providencia 1234, Depto. 501",
-    comuna: "Providencia",
-    rolAvaluo: "1234-56",
-    superficieTerreno: "85,5 m²",
-    superficieConstruida: "72,3 m²",
-    inscripcion: { foja: "2456", numero: "1890", anno: 2018, registro: "Propiedad" },
-    hipotecas: [
-      {
-        acreedor: "Banco de Chile",
-        monto: "UF 3.500",
-        fechaInscripcion: "2018-05-15",
-        foja: "8921",
-        numero: "6543",
-        anno: 2018,
-        estado: "Vigente",
-      },
-    ],
-    prohibiciones: [
-      {
-        tipo: "Prohibición de Gravar y Enajenar",
-        beneficiario: "Banco de Chile",
-        fechaInscripcion: "2018-05-15",
-        foja: "3421",
-        numero: "2109",
-        anno: 2018,
-        estado: "Vigente",
-      },
-    ],
-    comercio: [],
-    avaluoFiscal: "$98.500.000",
-    destino: "Habitacional",
-  },
-  {
-    id: "prop-002",
-    propietario: "Carlos Alberto Muñoz Reyes",
-    rut: "9.876.543-2",
-    direccion: "Calle Los Leones 456",
-    comuna: "Providencia",
-    rolAvaluo: "5678-90",
-    superficieTerreno: "320 m²",
-    superficieConstruida: "185 m²",
-    inscripcion: { foja: "1234", numero: "987", anno: 2015, registro: "Propiedad" },
-    hipotecas: [
-      {
-        acreedor: "BancoEstado",
-        monto: "UF 5.200",
-        fechaInscripcion: "2015-11-20",
-        foja: "6789",
-        numero: "4321",
-        anno: 2015,
-        estado: "Vigente",
-      },
-      {
-        acreedor: "Banco Santander",
-        monto: "UF 1.800",
-        fechaInscripcion: "2020-03-10",
-        foja: "2345",
-        numero: "1567",
-        anno: 2020,
-        estado: "Alzada",
-      },
-    ],
-    prohibiciones: [
-      {
-        tipo: "Prohibición de Gravar y Enajenar",
-        beneficiario: "BancoEstado",
-        fechaInscripcion: "2015-11-20",
-        foja: "4567",
-        numero: "3210",
-        anno: 2015,
-        estado: "Vigente",
-      },
-    ],
-    comercio: [],
-    avaluoFiscal: "$245.000.000",
-    destino: "Habitacional",
-  },
-  {
-    id: "prop-003",
-    propietario: "Pedro Antonio Soto Vargas",
-    rut: "15.678.901-3",
-    direccion: "Pasaje Los Aromos 32",
-    comuna: "Ñuñoa",
-    rolAvaluo: "3456-78",
-    superficieTerreno: "150 m²",
-    superficieConstruida: "95 m²",
-    inscripcion: { foja: "7890", numero: "5678", anno: 2019, registro: "Propiedad" },
-    hipotecas: [
-      {
-        acreedor: "Banco Itaú",
-        monto: "UF 2.800",
-        fechaInscripcion: "2019-08-22",
-        foja: "3456",
-        numero: "2345",
-        anno: 2019,
-        estado: "Vigente",
-      },
-    ],
-    prohibiciones: [
-      {
-        tipo: "Prohibición de Gravar y Enajenar",
-        beneficiario: "Banco Itaú",
-        fechaInscripcion: "2019-08-22",
-        foja: "6789",
-        numero: "4567",
-        anno: 2019,
-        estado: "Vigente",
-      },
-      {
-        tipo: "Embargo",
-        beneficiario: "Tesorería General de la República",
-        fechaInscripcion: "2023-06-14",
-        foja: "1234",
-        numero: "890",
-        anno: 2023,
-        estado: "Vigente",
-      },
-    ],
-    comercio: [],
-    avaluoFiscal: "$125.000.000",
-    destino: "Habitacional",
-  },
-];
 
 const comunas = [
   "Santiago",
   "Providencia",
   "Las Condes",
-  "Ñuñoa",
+  "Nunoa",
   "Vitacura",
   "La Reina",
   "Macul",
   "San Miguel",
   "La Florida",
-  "Maipú",
+  "Maipu",
   "Puente Alto",
-  "Peñalolén",
+  "Penalolen",
 ];
 
-// ─── Componente de Sección Expandible ───────────────────────────────────────
+// ─── Indicador de Fuente ───────────────────────────────────────────────────
+
+function IndicadorFuente({ source }: { source: "real" | "mock" | null }) {
+  if (!source) return null;
+
+  if (source === "real") {
+    return (
+      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-full text-xs font-medium text-emerald-700 dark:text-emerald-300">
+        <Globe className="w-3.5 h-3.5" />
+        Fuente: CBRS (datos en vivo)
+      </div>
+    );
+  }
+
+  return (
+    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-full text-xs font-medium text-amber-700 dark:text-amber-300">
+      <Database className="w-3.5 h-3.5" />
+      Datos de demostracion (CBR requiere autenticacion)
+    </div>
+  );
+}
+
+// ─── Componente de Seccion Expandible ───────────────────────────────────────
 
 function SeccionExpandible({
   titulo,
@@ -293,7 +188,7 @@ function TarjetaPropiedad({ propiedad }: { propiedad: Propiedad }) {
           <div className="flex items-start gap-3">
             <MapPin className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
             <div>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Dirección</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Direccion</p>
               <p className="text-sm font-medium text-gray-900 dark:text-white">{propiedad.direccion}</p>
               <p className="text-xs text-gray-500 dark:text-slate-400">{propiedad.comuna}</p>
             </div>
@@ -301,9 +196,9 @@ function TarjetaPropiedad({ propiedad }: { propiedad: Propiedad }) {
           <div className="flex items-start gap-3">
             <FileText className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
             <div>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Inscripción</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Inscripcion</p>
               <p className="text-sm font-medium text-gray-900 dark:text-white">
-                Foja {propiedad.inscripcion.foja} N° {propiedad.inscripcion.numero} Año {propiedad.inscripcion.anno}
+                Foja {propiedad.inscripcion.foja} N° {propiedad.inscripcion.numero} Ano {propiedad.inscripcion.anno}
               </p>
               <p className="text-xs text-gray-500 dark:text-slate-400">Rol: {propiedad.rolAvaluo}</p>
             </div>
@@ -323,7 +218,7 @@ function TarjetaPropiedad({ propiedad }: { propiedad: Propiedad }) {
           <div className="flex items-start gap-3">
             <Landmark className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
             <div>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Avalúo Fiscal</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Avaluo Fiscal</p>
               <p className="text-sm font-semibold text-gray-900 dark:text-white">{propiedad.avaluoFiscal}</p>
             </div>
           </div>
@@ -340,11 +235,11 @@ function TarjetaPropiedad({ propiedad }: { propiedad: Propiedad }) {
                   <p className="font-semibold text-gray-900 dark:text-white">{propiedad.inscripcion.foja}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500 dark:text-slate-400 text-xs">Número</p>
+                  <p className="text-gray-500 dark:text-slate-400 text-xs">Numero</p>
                   <p className="font-semibold text-gray-900 dark:text-white">{propiedad.inscripcion.numero}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500 dark:text-slate-400 text-xs">Año</p>
+                  <p className="text-gray-500 dark:text-slate-400 text-xs">Ano</p>
                   <p className="font-semibold text-gray-900 dark:text-white">{propiedad.inscripcion.anno}</p>
                 </div>
                 <div>
@@ -356,7 +251,7 @@ function TarjetaPropiedad({ propiedad }: { propiedad: Propiedad }) {
           </SeccionExpandible>
 
           {/* Hipotecas */}
-          <SeccionExpandible titulo="Hipotecas y Gravámenes" icono={Landmark} cantidad={propiedad.hipotecas.length} color="amber">
+          <SeccionExpandible titulo="Hipotecas y Gravamenes" icono={Landmark} cantidad={propiedad.hipotecas.length} color="amber">
             {propiedad.hipotecas.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-slate-400 italic">Sin hipotecas registradas</p>
             ) : (
@@ -456,7 +351,7 @@ function TarjetaPropiedad({ propiedad }: { propiedad: Propiedad }) {
                     <div className="flex gap-4 text-xs text-gray-500 dark:text-slate-400">
                       <span>Foja: {c.foja}</span>
                       <span>N°: {c.numero}</span>
-                      <span>Año: {c.anno}</span>
+                      <span>Ano: {c.anno}</span>
                     </div>
                   </div>
                 ))}
@@ -465,7 +360,7 @@ function TarjetaPropiedad({ propiedad }: { propiedad: Propiedad }) {
           </SeccionExpandible>
         </div>
 
-        {/* Botón Certificado */}
+        {/* Boton Certificado */}
         <div className="mt-5 flex justify-end">
           <button className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md shadow-blue-500/20">
             <Download className="w-4 h-4" />
@@ -482,19 +377,21 @@ function TarjetaPropiedad({ propiedad }: { propiedad: Propiedad }) {
 type TabId = "inscripcion" | "rut" | "direccion";
 
 const tabs: { id: TabId; label: string; icono: React.ElementType }[] = [
-  { id: "inscripcion", label: "Por Inscripción", icono: Hash },
+  { id: "inscripcion", label: "Por Inscripcion", icono: Hash },
   { id: "rut", label: "Por RUT", icono: User },
-  { id: "direccion", label: "Por Dirección", icono: MapPin },
+  { id: "direccion", label: "Por Direccion", icono: MapPin },
 ];
 
-// ─── Página Principal ───────────────────────────────────────────────────────
+// ─── Pagina Principal ───────────────────────────────────────────────────────
 
 export default function ConservadorPage() {
   const [tabActiva, setTabActiva] = useState<TabId>("inscripcion");
   const [buscando, setBuscando] = useState(false);
   const [resultados, setResultados] = useState<Propiedad[] | null>(null);
+  const [source, setSource] = useState<"real" | "mock" | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Formulario inscripción
+  // Formulario inscripcion
   const [foja, setFoja] = useState("");
   const [numero, setNumero] = useState("");
   const [anno, setAnno] = useState("");
@@ -503,23 +400,50 @@ export default function ConservadorPage() {
   // Formulario RUT
   const [rut, setRut] = useState("");
 
-  // Formulario dirección
+  // Formulario direccion
   const [direccion, setDireccion] = useState("");
   const [comunaDireccion, setComunaDireccion] = useState("");
 
-  const handleBuscar = () => {
+  const handleBuscar = async () => {
     setBuscando(true);
-    // Simular búsqueda
-    setTimeout(() => {
-      if (tabActiva === "rut") {
-        setResultados(mockPropiedades.filter((_, i) => i < 2));
+    setError(null);
+
+    try {
+      let body: Record<string, unknown> = {};
+
+      if (tabActiva === "inscripcion") {
+        body = {
+          accion: "buscarPropiedad",
+          comuna,
+          foja,
+          numero,
+          anno: anno ? parseInt(anno) : 0,
+        };
+      } else if (tabActiva === "rut") {
+        body = { accion: "buscarPorRut", rut };
       } else if (tabActiva === "direccion") {
-        setResultados([mockPropiedades[0]]);
-      } else {
-        setResultados(mockPropiedades);
+        body = { accion: "buscarPorDireccion", direccion, comuna: comunaDireccion };
       }
+
+      const response = await fetch("/api/scraping/conservador", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}`);
+      }
+
+      const json = await response.json();
+      setResultados(json.data?.propiedades || []);
+      setSource(json.source || json.data?.source || "mock");
+    } catch (err) {
+      console.error("Error buscando en conservador:", err);
+      setError("Error al consultar el Conservador de Bienes Raices. Intente nuevamente.");
+    } finally {
       setBuscando(false);
-    }, 800);
+    }
   };
 
   return (
@@ -532,7 +456,7 @@ export default function ConservadorPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Conservador de Bienes Raíces
+              Conservador de Bienes Raices
             </h1>
             <p className="text-sm text-gray-500 dark:text-slate-400">
               Consulta de inscripciones, hipotecas, prohibiciones y certificados
@@ -552,6 +476,8 @@ export default function ConservadorPage() {
                 onClick={() => {
                   setTabActiva(tab.id);
                   setResultados(null);
+                  setSource(null);
+                  setError(null);
                 }}
                 className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium border-b-2 transition-colors ${
                   tabActiva === tab.id
@@ -584,7 +510,7 @@ export default function ConservadorPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1.5">
-                  Número
+                  Numero
                 </label>
                 <input
                   type="text"
@@ -596,7 +522,7 @@ export default function ConservadorPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1.5">
-                  Año
+                  Ano
                 </label>
                 <div className="relative">
                   <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -651,7 +577,7 @@ export default function ConservadorPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
                 <label className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1.5">
-                  Dirección
+                  Direccion
                 </label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -701,22 +627,31 @@ export default function ConservadorPage() {
         </div>
       </div>
 
+      {/* Error */}
+      {error && (
+        <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+          <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+          <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+        </div>
+      )}
+
       {/* Resultados */}
       {buscando && (
         <div className="flex items-center justify-center py-16">
           <div className="text-center">
             <Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-3" />
-            <p className="text-sm text-gray-500 dark:text-slate-400">Consultando Conservador de Bienes Raíces...</p>
+            <p className="text-sm text-gray-500 dark:text-slate-400">Consultando Conservador de Bienes Raices...</p>
           </div>
         </div>
       )}
 
       {resultados && !buscando && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">
               Resultados ({resultados.length})
             </h2>
+            <IndicadorFuente source={source} />
           </div>
           <div className="space-y-6">
             {resultados.map((prop) => (
@@ -726,7 +661,7 @@ export default function ConservadorPage() {
         </div>
       )}
 
-      {!resultados && !buscando && (
+      {!resultados && !buscando && !error && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="p-4 bg-gray-100 dark:bg-slate-800 rounded-2xl mb-4">
             <Building2 className="w-10 h-10 text-gray-400 dark:text-slate-500" />
@@ -735,7 +670,7 @@ export default function ConservadorPage() {
             Buscar en el Conservador
           </h3>
           <p className="text-sm text-gray-500 dark:text-slate-400 max-w-md">
-            Ingrese los datos de inscripción, RUT del propietario o dirección del inmueble para consultar los registros del Conservador de Bienes Raíces.
+            Ingrese los datos de inscripcion, RUT del propietario o direccion del inmueble para consultar los registros del Conservador de Bienes Raices.
           </p>
         </div>
       )}
