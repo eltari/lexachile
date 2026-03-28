@@ -24,16 +24,24 @@ export default function LoginPage() {
         email,
         password,
         redirect: false,
+        callbackUrl: "/dashboard",
       });
 
       if (result?.error) {
-        setError("Credenciales incorrectas. Verifica tu email y contraseña.");
-      } else {
+        if (result.error === "CredentialsSignin") {
+          setError("Email o contraseña incorrectos. Verifica tus datos.");
+        } else {
+          setError(`Error: ${result.error}`);
+        }
+      } else if (result?.ok) {
         router.push("/dashboard");
         router.refresh();
+      } else {
+        setError("Respuesta inesperada. Intenta de nuevo.");
       }
-    } catch {
-      setError("Ocurrió un error al iniciar sesión. Intenta nuevamente.");
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("Error de conexión. Verifica que el servidor esté activo.");
     } finally {
       setLoading(false);
     }
