@@ -13,7 +13,11 @@ import {
   Trash2,
   Scale,
   Loader2,
+  FileText,
+  FileSpreadsheet,
+  Download,
 } from "lucide-react";
+import { exportCausasPDF, exportCausasExcel } from "@/lib/export";
 import { estadosCausa, materias, tribunales, formatFechaCorta } from "@/lib/utils";
 
 type EstadoCausa = keyof typeof estadosCausa;
@@ -91,13 +95,33 @@ export default function CausasPage() {
             encontrada{total !== 1 ? "s" : ""}
           </p>
         </div>
-        <Link
-          href="/causas/nueva"
-          className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Nueva Causa
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportCausasPDF(causas)}
+            disabled={loading || causas.length === 0}
+            className="inline-flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Exportar a PDF"
+          >
+            <FileText className="w-4 h-4" />
+            PDF
+          </button>
+          <button
+            onClick={() => exportCausasExcel(causas)}
+            disabled={loading || causas.length === 0}
+            className="inline-flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Exportar a Excel"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Excel
+          </button>
+          <Link
+            href="/causas/nueva"
+            className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Nueva Causa
+          </Link>
+        </div>
       </div>
 
       {/* Search and Filters */}

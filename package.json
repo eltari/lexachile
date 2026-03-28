@@ -8,7 +8,12 @@
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint",
-    "seed": "npx tsx prisma/seed.ts"
+    "seed": "npx tsx prisma/seed.ts",
+    "db:push": "prisma db push",
+    "db:seed": "npx tsx prisma/seed.ts",
+    "db:studio": "prisma studio",
+    "db:use-sqlite": "bash scripts/use-sqlite.sh",
+    "db:use-postgres": "bash scripts/use-postgres.sh"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",
@@ -18,6 +23,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.7",
     "lucide-react": "^1.7.0",
     "next": "16.2.1",
     "next-auth": "^5.0.0-beta.30",
@@ -26,6 +33,7 @@
     "react-dom": "19.2.4",
     "recharts": "^3.8.1",
     "tailwind-merge": "^3.5.0",
+    "xlsx": "^0.18.5",
     "zustand": "^5.0.12"
   },
   "devDependencies": {

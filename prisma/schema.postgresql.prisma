@@ -1,0 +1,190 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== AUTH ====================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  password      String
+  role          String    @default("abogado")
+  avatar        String?
+  phone         String?
+  rut           String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  causas        Causa[]
+  clientes      Cliente[]
+  documentos    Documento[]
+  eventos       Evento[]
+  notas         Nota[]
+}
+
+// ==================== CAUSAS ====================
+
+model Causa {
+  id            String    @id @default(cuid())
+  rol           String
+  rit           String?
+  ruc           String?
+  caratulado    String
+  materia       String
+  tipo          String
+  estado        String    @default("ingresada")
+  tribunal      String
+  juez          String?
+  fechaIngreso  DateTime  @default(now())
+  fechaTermino  DateTime?
+  observaciones String?
+  cuantia       Float?
+  moneda        String    @default("CLP")
+
+  abogadoId     String
+  abogado       User      @relation(fields: [abogadoId], references: [id])
+  clienteId     String
+  cliente       Cliente   @relation(fields: [clienteId], references: [id])
+
+  movimientos   Movimiento[]
+  documentos    Documento[]
+  eventos       Evento[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Movimiento {
+  id            String    @id @default(cuid())
+  tipo          String
+  descripcion   String
+  fecha         DateTime  @default(now())
+  folio         String?
+
+  causaId       String
+  causa         Causa     @relation(fields: [causaId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime  @default(now())
+}
+
+// ==================== CLIENTES ====================
+
+model Cliente {
+  id            String    @id @default(cuid())
+  tipo          String    @default("natural")
+  nombre        String
+  rut           String    @unique
+  email         String?
+  telefono      String?
+  direccion     String?
+  comuna        String?
+  ciudad        String?
+  region        String?
+  giro          String?
+  representante String?
+
+  abogadoId     String
+  abogado       User      @relation(fields: [abogadoId], references: [id])
+
+  causas        Causa[]
+  documentos    Documento[]
+  notas         Nota[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Nota {
+  id            String    @id @default(cuid())
+  contenido     String
+
+  clienteId     String
+  cliente       Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  autorId       String
+  autor         User      @relation(fields: [autorId], references: [id])
+
+  createdAt     DateTime  @default(now())
+}
+
+// ==================== DOCUMENTOS ====================
+
+model Documento {
+  id            String    @id @default(cuid())
+  nombre        String
+  tipo          String
+  contenido     String?
+  archivo       String?
+  plantilla     Boolean   @default(false)
+
+  causaId       String?
+  causa         Causa?    @relation(fields: [causaId], references: [id])
+  clienteId     String?
+  cliente       Cliente?  @relation(fields: [clienteId], references: [id])
+  autorId       String
+  autor         User      @relation(fields: [autorId], references: [id])
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// ==================== CALENDARIO ====================
+
+model Evento {
+  id            String    @id @default(cuid())
+  titulo        String
+  descripcion   String?
+  tipo          String
+  fechaInicio   DateTime
+  fechaFin      DateTime?
+  todoElDia     Boolean   @default(false)
+  color         String    @default("#3b82f6")
+  recordatorio  Boolean   @default(true)
+  completado    Boolean   @default(false)
+
+  causaId       String?
+  causa         Causa?    @relation(fields: [causaId], references: [id])
+  usuarioId     String
+  usuario       User      @relation(fields: [usuarioId], references: [id])
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// ==================== LEYES ====================
+
+model Ley {
+  id            String    @id @default(cuid())
+  numero        String
+  titulo        String
+  fechaPublicacion DateTime?
+  estado        String    @default("vigente")
+  url           String?
+  contenido     String?
+  tipo          String
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// ==================== CONSERVADOR BIENES RAICES ====================
+
+model PropiedadCBR {
+  id            String    @id @default(cuid())
+  foja          String?
+  numero        String?
+  anno          Int?
+  comuna        String
+  direccion     String?
+  propietario   String?
+  rut           String?
+  inscripcion   String?
+  registro      String
+
+  createdAt     DateTime  @default(now())
+}

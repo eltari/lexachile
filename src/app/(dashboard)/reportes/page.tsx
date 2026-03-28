@@ -13,7 +13,9 @@ import {
   ChevronDown,
   TrendingUp,
   Users,
+  Loader2,
 } from "lucide-react";
+import { exportReportePDF, exportReporteExcel } from "@/lib/export";
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -265,8 +267,56 @@ function DisplayDonut({ datos }: { datos: DatoDonut[] }) {
 
 export default function ReportesPage() {
   const [periodo, setPeriodo] = useState<Periodo>("anno");
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   const maxMateria = Math.max(...causasPorMateria.map((c) => c.valor));
+
+  const getReportData = () => ({
+    resumen: resumenCards.map((c) => ({
+      label: c.label,
+      valor: c.valor,
+      subValor: c.subValor,
+      trend: c.trend,
+    })),
+    causasPorMateria: causasPorMateria.map((m) => ({
+      label: m.label,
+      valor: m.valor,
+    })),
+    estadoCausas: estadoCausas.map((e) => ({
+      label: e.label,
+      valor: e.valor,
+    })),
+    abogados: abogados.map((a) => ({
+      nombre: a.nombre,
+      activas: a.activas,
+      ganadas: a.ganadas,
+      perdidas: a.perdidas,
+      tasaExito: a.tasaExito,
+    })),
+    causasPorMes: causasPorMes.map((m) => ({
+      label: m.label,
+      valor: m.valor,
+    })),
+  });
+
+  const handleExportPDF = async () => {
+    setExportingPDF(true);
+    try {
+      exportReportePDF(getReportData());
+    } finally {
+      setExportingPDF(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    setExportingExcel(true);
+    try {
+      exportReporteExcel(getReportData());
+    } finally {
+      setExportingExcel(false);
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -302,12 +352,20 @@ export default function ReportesPage() {
           </div>
 
           {/* Export Buttons */}
-          <button className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
-            <FileText className="w-4 h-4" />
+          <button
+            onClick={handleExportPDF}
+            disabled={exportingPDF}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+          >
+            {exportingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
             Exportar PDF
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
-            <FileSpreadsheet className="w-4 h-4" />
+          <button
+            onClick={handleExportExcel}
+            disabled={exportingExcel}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+          >
+            {exportingExcel ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
             Exportar Excel
           </button>
         </div>

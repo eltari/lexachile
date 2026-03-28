@@ -13,7 +13,10 @@ import {
   Building2,
   User,
   Loader2,
+  FileText,
+  FileSpreadsheet,
 } from "lucide-react";
+import { exportClientesExcel, exportToPDF } from "@/lib/export";
 import { formatRut } from "@/lib/utils";
 
 interface ClienteAPI {
@@ -76,13 +79,45 @@ export default function ClientesPage() {
             registrado{total !== 1 ? "s" : ""}
           </p>
         </div>
-        <Link
-          href="/clientes/nuevo"
-          className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Nuevo Cliente
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const headers = ["Nombre", "RUT", "Tipo", "Email", "Telefono", "Ciudad", "Causas"];
+              const rows = clientes.map((c) => [
+                c.nombre,
+                c.rut,
+                c.tipo === "juridica" ? "Persona Juridica" : "Persona Natural",
+                c.email || "",
+                c.telefono || "",
+                c.ciudad || "",
+                String(c._count.causas),
+              ]);
+              exportToPDF(`Listado de Clientes (${clientes.length})`, headers, rows, `clientes_lexachile_${new Date().toISOString().slice(0, 10)}.pdf`);
+            }}
+            disabled={loading || clientes.length === 0}
+            className="inline-flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Exportar a PDF"
+          >
+            <FileText className="w-4 h-4" />
+            PDF
+          </button>
+          <button
+            onClick={() => exportClientesExcel(clientes)}
+            disabled={loading || clientes.length === 0}
+            className="inline-flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Exportar a Excel"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Excel
+          </button>
+          <Link
+            href="/clientes/nuevo"
+            className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Nuevo Cliente
+          </Link>
+        </div>
       </div>
 
       {/* Search and Filters */}
